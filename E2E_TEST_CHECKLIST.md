@@ -3,7 +3,7 @@
 Run everything from the project folder (`AI Receptionist`). Tick each box as you go. If a step fails, write the step number and what you saw in the Notes line, then run `python execution/e2e_helper.py status` and send both to Claude.
 
 **What you need:** a phone with Telegram, a way to see the staff group (Telegram on your computer is easiest), and a microphone for step 3 (or use the shortcut there).
-**Links:** site https://alejo-nine.vercel.app · dashboard https://alejo-nine.vercel.app/app · bot `@brightside_Staff_bot`
+**Links:** site https://alejo-nine.vercel.app · dashboard https://alejo-nine.vercel.app/app · bot your Telegram bot
 **Test data rule:** every test guest must be named "Test <something>" (for example "Test Tolu"). Cleanup only deletes guests whose names start with "Test".
 **Timing:** the scheduler runs every 15 minutes in Lagos time. Check-in reminders go out from 10:00 for stays that start tomorrow. Checkout reminders go out from 08:00 for stays that end today. The thank-you goes out 30 minutes after checkout.
 

@@ -23,8 +23,6 @@ ROOT = Path(__file__).resolve().parent.parent
 CRED_FILE = ROOT / ".tmp" / "n8n_credentials.json"
 
 SB = "https://uavlejanscnsvjdxfslh.supabase.co/rest/v1"
-STAFF_CHAT_ID = -5299401397
-BOT_USERNAME = "brightside_Staff_bot"
 HOTEL_NAME = "BrightSide Hotel"
 COHERE_MODEL = "command-a-plus-05-2026"
 
@@ -39,6 +37,8 @@ def load_env():
 
 
 ENV = load_env()
+STAFF_CHAT_ID = int(ENV["TELEGRAM_STAFF_CHAT_ID"])      # the staff Telegram group (from .env)
+BOT_USERNAME = ENV["TELEGRAM_BOT_USERNAME"]                # the bot guests open, without the @ (from .env)
 
 
 def api(method, path, body=None):

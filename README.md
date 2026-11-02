@@ -54,4 +54,4 @@ Prices, the BrightSide Hotel facts, the demo email `demo@alejo.example`, and the
 
 ## Credits
 
-Lagos photographs are from Wikimedia Commons (credits are in the site footer); music in any promo video is "Happy Beats / Business Moves" by Sascha Ende (CC BY 4.0).
+Lagos photographs are from Wikimedia Commons and The Metropolitan Museum of Art, each with its own licence and author listed in `website/assets/photos/credits.json` and in the site footer; music in any promo video is "Happy Beats / Business Moves" by Sascha Ende (CC BY 4.0).
