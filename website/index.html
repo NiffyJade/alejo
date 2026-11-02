@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Alejo: the AI front desk for Nigerian hotels</title>
+  <meta name="description" content="Alejo answers hotel guests by phone and chat in Pidgin or English, only from your hotel's own facts. When it does not know, it asks your staff.">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="color-scheme" content="light">
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@300,400,500,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="site.css">
+  <script>document.documentElement.classList.add('js')</script>
+</head>
+<body>
+<a class="skip" href="#top">Skip to content</a>
+<div class="progress" id="progress" aria-hidden="true"></div>
+
+<header class="site-head" id="siteHead">
+  <div class="wrap head-in">
+    <a class="brand" href="#top" aria-label="Alejo, back to top"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0z" fill="#111"/><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="#111"/><circle cx="12" cy="6.2" r="2" fill="#1a4be0"/></svg><span translate="no">Alejo</span></a>
+    <nav class="nav" id="nav" aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#asks">When it asks you</a>
+      <a href="#handles">What it handles</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">Questions</a>
+      <a class="nav-extra" href="/app/index.html">Staff dashboard</a>
+      <a class="nav-extra nav-cta" href="#demo">Book a demo</a>
+    </nav>
+    <div class="head-right">
+      <a class="head-link" href="/app/index.html">Staff dashboard</a>
+      <a class="btn" href="#demo">Book a demo</a>
+      <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="nav">Menu</button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- HERO: a plain headline and the product doing its job -->
+  <section class="hero wrap" aria-labelledby="h-hero">
+    <div class="hero-text">
+      <h1 id="h-hero">The AI front desk for Nigerian hotels.</h1>
+      <p class="lead">It answers guests in Pidgin or English, only from your hotel's own facts, and asks your staff when it does not know.</p>
+      <div class="hero-actions">
+        <a class="btn btn-lg" href="#demo">Book a demo</a>
+        <a class="text-link" href="#how">See how a stay runs</a>
+      </div>
+    </div>
+    <div class="stage" id="try">
+      <div class="chat" data-ui>
+        <div class="chat-head"><span class="chat-mark" aria-hidden="true">B</span><span><strong>BrightSide Hotel</strong><small>Telegram, sample answers</small></span></div>
+        <div class="chat-log" id="chatLog" role="log" aria-live="polite">
+          <p class="msg out">abeg, wetin be the wifi password?</p>
+          <p class="msg in">The Wi-Fi network is BrightSide_Guest and the password is brightside2026.</p>
+        </div>
+        <div class="chips" id="chips" role="group" aria-label="Try a question">
+          <button type="button" class="chip" data-q="Do you have a helipad?">Do you have a helipad?</button>
+          <button type="button" class="chip" data-q="What time is checkout?">What time is checkout?</button>
+          <button type="button" class="chip" data-q="abeg, I wan airport pickup">abeg, I wan airport pickup</button>
+        </div>
+        <form class="chat-form" id="chatForm" autocomplete="off">
+          <label class="sr" for="chatInput">Ask the front desk</label>
+          <input id="chatInput" name="q" type="text" placeholder="Ask in Pidgin or English…" maxlength="140">
+          <button type="submit" class="send">Send</button>
+        </form>
+        <div class="staff-pane" id="staffPane" hidden>
+          <p class="staff-t">BrightSide Staff <span id="staffState">Guest needs help</span></p>
+          <p class="staff-q" id="staffQ"></p>
+          <form class="staff-form" id="staffForm" autocomplete="off">
+            <label class="sr" for="staffInput">Reply as staff</label>
+            <input id="staffInput" name="r" type="text" placeholder="Reply as staff. Start with #kb to save it…" maxlength="140">
+            <button type="submit" class="send">Reply</button>
+          </form>
+        </div>
+      </div>
+      <p class="stage-note">Try it. Ask anything a guest would.</p>
+    </div>
+  </section>
+
+  <!-- HOW A STAY RUNS: one card, four fields -->
+  <section class="block wrap" id="how" aria-labelledby="h-how">
+    <h2 id="h-how">Every stay, from booking to thank-you.</h2>
+    <div class="fields">
+      <article class="field fd-1">
+        <p class="clause">It books by phone or Telegram.</p>
+        <div class="scard" data-ui><b>Tolu Adeyemi</b><span>Deluxe 204, 28 to 30 Oct</span><em class="pill">Booked by phone</em></div>
+      </article>
+      <article class="field fd-2">
+        <p class="clause">The day before, it reminds them.</p>
+        <div class="scard" data-ui><b>Tolu Adeyemi</b><span>Reminder sent at 10:00</span><span class="mock-btn">Check in</span></div>
+      </article>
+      <article class="field fd-3">
+        <p class="clause">One tap to check in, and a private code.</p>
+        <div class="scard" data-ui><span>Your private stay code</span><b class="code">482 913</b><em class="pill">Checked in</em></div>
+      </article>
+      <article class="field fd-4">
+        <p class="clause">At checkout, it says thank you.</p>
+        <div class="scard" data-ui><b>Tolu Adeyemi</b><span>Thank-you sent at 12:30</span><em class="pill">Thanked</em></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- WHEN IT DOES NOT KNOW: one row in three states, the middle one is live -->
+  <section class="block wrap" id="asks" aria-labelledby="h-asks">
+    <div class="split">
+      <div class="split-head">
+        <h2 id="h-asks">It asks you when it does not know.</h2>
+        <p class="body">A fact you have not filled in is held back, never guessed. Your staff get the question in Telegram, and their reply goes straight to the guest.</p>
+        <a class="text-link" href="/app/index.html">Open the staff dashboard</a>
+      </div>
+      <div class="states">
+        <div class="state">
+          <p class="state-w">It arrives</p>
+          <div class="irow" data-ui>
+            <span class="disc">FJ</span>
+            <div class="irow-t"><b>Folake Johnson</b><span>Do you have a helipad?</span></div>
+            <span class="irow-m">02:14, Telegram</span>
+            <em class="pill pill-red">Needs you</em>
+            <p class="irow-n">Not in your facts. The AI told her you are checking.</p>
+          </div>
+        </div>
+        <div class="state">
+          <p class="state-w">You reply</p>
+          <div class="irow irow-live" id="liveRow" data-ui>
+            <span class="disc">FJ</span>
+            <div class="irow-t"><b>Folake Johnson</b><span>Do you have a helipad?</span></div>
+            <span class="irow-m">02:14, Telegram</span>
+            <em class="pill pill-red" id="livePill">Needs you</em>
+            <form class="irow-reply" id="liveForm" autocomplete="off">
+              <label class="sr" for="liveInput">Your reply to Folake</label>
+              <input id="liveInput" value="No helipad, Ma. Free parking though." maxlength="120">
+              <button type="submit" class="btn btn-small">Send reply</button>
+            </form>
+            <p class="irow-n irow-done" id="liveDone" hidden>Sent to Folake and saved to Facts.</p>
+          </div>
+        </div>
+        <div class="state">
+          <p class="state-w">It is answered</p>
+          <div class="irow" data-ui>
+            <span class="disc">FJ</span>
+            <div class="irow-t"><b>Folake Johnson</b><span>No helipad, Ma. Free parking though.</span></div>
+            <span class="irow-m">02:16, Telegram</span>
+            <em class="pill pill-ok">Answered</em>
+            <p class="irow-n">Sent to Folake and saved to Facts.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHAT IT HANDLES: a short list, and the product doing each thing -->
+  <section class="block wrap" id="handles" aria-labelledby="h-handles">
+    <h2 id="h-handles">Everything the front desk does, handled.</h2>
+    <div class="explore" id="explore">
+      <div class="ex-tabs" role="tablist" aria-label="What it handles" aria-orientation="vertical">
+        <div class="ex-item is-sel"><button type="button" class="ex-tab" role="tab" id="ex-t0" aria-selected="true" aria-controls="ex-p0" aria-describedby="ex-d0"><span class="ex-n">Books by phone</span></button><p class="ex-d" id="ex-d0">Understands Nigerian English and Pidgin, and says back what it booked.</p><i class="ex-fill" aria-hidden="true"></i></div>
+        <div class="ex-item"><button type="button" class="ex-tab" role="tab" id="ex-t1" aria-selected="false" tabindex="-1" aria-controls="ex-p1" aria-describedby="ex-d1"><span class="ex-n">Check-in reminders</span></button><p class="ex-d" id="ex-d1">The day before, at 10:00 Lagos time, with a Check in button.</p><i class="ex-fill" aria-hidden="true"></i></div>
+        <div class="ex-item"><button type="button" class="ex-tab" role="tab" id="ex-t2" aria-selected="false" tabindex="-1" aria-controls="ex-p2" aria-describedby="ex-d2"><span class="ex-n">Private stay codes</span></button><p class="ex-d" id="ex-d2">A six-digit code, shown only to the chat linked to that booking, from the check-in date.</p><i class="ex-fill" aria-hidden="true"></i></div>
+        <div class="ex-item"><button type="button" class="ex-tab" role="tab" id="ex-t3" aria-selected="false" tabindex="-1" aria-controls="ex-p3" aria-describedby="ex-d3"><span class="ex-n">Answers in Pidgin</span></button><p class="ex-d" id="ex-d3">Abeg, wetin, how far. It reads how guests write and answers the same way.</p><i class="ex-fill" aria-hidden="true"></i></div>
+        <div class="ex-item"><button type="button" class="ex-tab" role="tab" id="ex-t4" aria-selected="false" tabindex="-1" aria-controls="ex-p4" aria-describedby="ex-d4"><span class="ex-n">Asks your staff</span></button><p class="ex-d" id="ex-d4">What it cannot answer lands in your Telegram staff group, at any hour.</p><i class="ex-fill" aria-hidden="true"></i></div>
+        <div class="ex-item"><button type="button" class="ex-tab" role="tab" id="ex-t5" aria-selected="false" tabindex="-1" aria-controls="ex-p5" aria-describedby="ex-d5"><span class="ex-n">Learns from replies</span></button><p class="ex-d" id="ex-d5">Start a reply with #kb and it becomes an answer for the next guest.</p><i class="ex-fill" aria-hidden="true"></i></div>
+        <div class="ex-item"><button type="button" class="ex-tab" role="tab" id="ex-t6" aria-selected="false" tabindex="-1" aria-controls="ex-p6" aria-describedby="ex-d6"><span class="ex-n">Checkout and thank-you</span></button><p class="ex-d" id="ex-d6">A reminder on the morning of checkout, then a thank-you after they leave.</p><i class="ex-fill" aria-hidden="true"></i></div>
+        <div class="ex-item"><button type="button" class="ex-tab" role="tab" id="ex-t7" aria-selected="false" tabindex="-1" aria-controls="ex-p7" aria-describedby="ex-d7"><span class="ex-n">Emergency alerts</span></button><p class="ex-d" id="ex-d7">Guests get 112 straight away and your staff are alerted at once.</p><i class="ex-fill" aria-hidden="true"></i></div>
+      </div>
+      <div class="ex-stage">
+        <div class="ex-panel is-on" role="tabpanel" id="ex-p0" aria-labelledby="ex-t0">
+          <div class="frag f-call" data-ui><p class="call-k"><i class="call-dot"></i>Incoming call, 21:48</p><p class="call-q">“I wan book Deluxe for Friday, two nights.”</p><p class="call-a">Booked. Deluxe 204, Fri 30 Oct to Sun 1 Nov. Reference 7K3Q9XAB.</p></div>
+        </div>
+        <div class="ex-panel" role="tabpanel" id="ex-p1" aria-labelledby="ex-t1">
+          <div class="frag" data-ui><div class="frag-log"><p class="msg in"><span class="k">BrightSide Hotel</span>Good evening Tolu. You check in tomorrow from 2:00 PM. Tap Check in when you arrive.</p><span class="tg-btn">Check in</span></div></div>
+        </div>
+        <div class="ex-panel" role="tabpanel" id="ex-p2" aria-labelledby="ex-t2">
+          <div class="frag f-code" data-ui><p>Your private stay code</p><b>482 913</b><p class="frag-note">Shown only in this chat, from 28 Oct.</p></div>
+        </div>
+        <div class="ex-panel" role="tabpanel" id="ex-p3" aria-labelledby="ex-t3">
+          <div class="frag" data-ui><div class="frag-log"><p class="msg out">abeg, which time una dey serve breakfast?</p><p class="msg in">Breakfast dey from 6:30 AM to 10:30 AM every day. The restaurant dey open from 7:00 AM.</p></div></div>
+        </div>
+        <div class="ex-panel" role="tabpanel" id="ex-p4" aria-labelledby="ex-t4">
+          <div class="frag" data-ui><div class="frag-log"><p class="frag-note">BrightSide Staff</p><p class="msg in"><span class="k">Guest needs help</span>“Do you have a helipad?” Reply to this message to answer the guest.</p></div></div>
+        </div>
+        <div class="ex-panel" role="tabpanel" id="ex-p5" aria-labelledby="ex-t5">
+          <div class="frag" data-ui><div class="frag-log"><p class="msg out">#kb No helipad, Ma. Free parking though.</p><em class="pill pill-ok">Saved to Facts</em><p class="frag-note">The next guest who asks gets this answer.</p></div></div>
+        </div>
+        <div class="ex-panel" role="tabpanel" id="ex-p6" aria-labelledby="ex-t6">
+          <div class="frag" data-ui><div class="frag-log"><p class="msg in">Checkout is by 12:00 noon. Tap Check out when you leave.</p><span class="tg-btn">Check out</span><p class="msg in">Thank you for staying, Tolu. Safe journey, and we hope to see you again.</p></div></div>
+        </div>
+        <div class="ex-panel" role="tabpanel" id="ex-p7" aria-labelledby="ex-t7">
+          <div class="frag" data-ui><div class="frag-log"><p class="msg out">I need a doctor</p><p class="msg in">Call 112 now. I have alerted our staff and they are on their way.</p><em class="pill pill-red">Staff alerted</em></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BUILT FOR NIGERIA: the one picture that changes slowly -->
+  <section class="block wrap" id="nigeria" aria-labelledby="h-ng">
+    <div class="split split-ng">
+      <div class="split-head">
+        <h2 id="h-ng">Built for how Nigerian hotels work.</h2>
+        <dl class="plain">
+          <div><dt>Pidgin and Yoruba-accented English</dt><dd>On calls and in chat, guests are understood the way they speak.</dd></div>
+          <div><dt>Light goes out, answers stay on</dt><dd>It tells guests what the generator does, and alerts staff if it lasts.</dd></div>
+          <div><dt>NIN, passport or voter's card</dt><dd>Guests are told which ID to bring before they arrive.</dd></div>
+          <div><dt>Prices in naira</dt><dd>Bank transfer details, airport pickup and checkout times, in your words.</dd></div>
+        </dl>
+      </div>
+      <figure class="slides" id="slides">
+        <div class="slide-stack">
+          <img class="is-on" src="assets/photos/aerial-view-of-victoria-island-in-lagos.jpg" width="1920" height="1245" alt="Aerial view of Victoria Island, Lagos, with a harbour full of yachts" data-cap="Victoria Island">
+          <img src="assets/photos/lagos-island-1.jpg" width="1920" height="1279" alt="Lagos Island seen from above, with the Central Mosque and Balogun market" loading="lazy" data-cap="Lagos Island">
+          <img src="assets/photos/lagos-lagoon-brothers-at-dusk.jpg" width="1920" height="1094" alt="A fisherman casting a net from a canoe on the Lagos lagoon at dusk" loading="lazy" data-cap="The lagoon at dusk">
+          <img src="assets/photos/aerial-view-of-a-busy-tomato-market.jpg" width="1920" height="1303" alt="Aerial view of a busy tomato market in Lagos" loading="lazy" data-cap="A market in Lagos">
+        </div>
+        <figcaption id="slideCap">Victoria Island</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="block wrap" id="pricing" aria-labelledby="h-pricing">
+    <h2 id="h-pricing">Setup once, then one monthly plan.</h2>
+    <div class="plans">
+      <article class="plan">
+        <h3>Desk</h3>
+        <p class="price">₦60,000<span>a month</span></p>
+        <ul>
+          <li>₦150,000 setup, once</li>
+          <li>100 voice minutes, then ₦90 each</li>
+          <li>Phone and Telegram</li>
+          <li>2 dashboard seats</li>
+          <li>Your facts, loaded for you</li>
+        </ul>
+        <a class="btn btn-line" href="#demo">Book a demo</a>
+      </article>
+      <article class="plan plan-rec">
+        <h3>Hotel</h3>
+        <p class="price">₦150,000<span>a month</span></p>
+        <ul>
+          <li>₦250,000 setup, once</li>
+          <li>400 voice minutes, then ₦80 each</li>
+          <li>Phone and Telegram, WhatsApp when it ships</li>
+          <li>6 dashboard seats</li>
+          <li>Your facts, loaded for you</li>
+        </ul>
+        <a class="btn btn-light" href="#demo">Book a demo</a>
+      </article>
+      <article class="plan">
+        <h3>Group</h3>
+        <p class="price">Ask us<span>for several hotels</span></p>
+        <ul>
+          <li>Setup quoted</li>
+          <li>Voice minutes pooled</li>
+          <li>Phone and Telegram, WhatsApp when it ships</li>
+          <li>Unlimited seats</li>
+          <li>As many hotels as you run</li>
+        </ul>
+        <a class="btn btn-line" href="#demo">Book a demo</a>
+      </article>
+    </div>
+  </section>
+
+  <!-- QUESTIONS -->
+  <section class="block wrap" id="faq" aria-labelledby="h-faq">
+    <div class="faq">
+      <h2 id="h-faq">Questions</h2>
+      <div class="tiles">
+        <details name="faq" open><summary>Does it ever make things up?</summary><p>No. It answers only from the facts you give it. A fact you have not filled in is withheld, and the question goes to your staff instead.</p></details>
+        <details name="faq"><summary>Which languages does it understand?</summary><p>English as Nigerians speak it, Pidgin, and Yoruba-accented English on calls. A caller who speaks only Yoruba, or another language, is handed to your staff with their number.</p></details>
+        <details name="faq"><summary>Which channels work today?</summary><p>Phone and Telegram. Guests who book by phone share their number with the bot once and the stay links up. WhatsApp and website chat are next.</p></details>
+        <details name="faq"><summary>What happens at 2 a.m. when it does not know?</summary><p>The guest is told you are checking, and your staff group gets the question. Whoever replies first is heard: the reply goes to the guest, and if it starts with #kb it becomes an answer for next time.</p></details>
+        <details name="faq"><summary>How long does setup take?</summary><p>Most of it is your facts: Wi-Fi, hours, prices, policies, bank details. We load 70 Nigerian-hotel answers, you fill the blanks, and we connect your phone number.</p></details>
+        <details name="faq"><summary>Where does guest data live?</summary><p>In a private database set up for your hotel. A stay code is shown only to the chat linked to that booking, and only from the check-in date.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEMO: the first step, already open -->
+  <section class="block cta wrap" id="demo" aria-labelledby="h-demo">
+    <div class="cta-field">
+      <div class="cta-text">
+        <h2 id="h-demo">See it on your hotel.</h2>
+        <p class="body">We load your facts into a live demo and ring you on it.</p>
+      </div>
+      <form class="dialog" id="demoForm" data-ui autocomplete="off">
+        <h3>Book your demo</h3>
+        <label for="demoHotel">Hotel name</label>
+        <input id="demoHotel" name="hotel" type="text" placeholder="BrightSide Hotel…" autocomplete="organization">
+        <label for="demoEmail">Your email</label>
+        <input id="demoEmail" name="email" type="email" inputmode="email" spellcheck="false" placeholder="you@yourhotel.ng…" required autocomplete="email">
+        <fieldset class="seg"><legend>Rooms</legend>
+          <label><input type="radio" name="rooms" value="Under 30 rooms" checked><span>Under 30</span></label>
+          <label><input type="radio" name="rooms" value="30 rooms or more"><span>30 or more</span></label>
+        </fieldset>
+        <div class="hp" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+        <button type="submit" class="btn btn-wide">Book a demo</button>
+        <p class="dialog-status" id="demoStatus" role="status"></p>
+      </form>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot wrap">
+  <div class="foot-row">
+    <div class="ftile ft-say"><p>Alejo answers your guests, and asks you when it does not know.</p><p class="ft-small">© Alejo</p></div>
+    <nav class="ftile ft-nav" aria-label="Footer"><a href="#how">How it works</a><a href="#handles">What it handles</a><a href="#pricing">Pricing</a><a href="#faq">Questions</a><a href="/app/index.html">Staff dashboard</a></nav>
+    <div class="ftile ft-time"><p>Lagos, Nigeria</p><p class="ft-time-v" id="lagosTime">WAT</p></div>
+    <div class="ftile ft-mail"><a href="mailto:demo@alejo.example">demo@alejo.example</a></div>
+  </div>
+  <div class="foot-row foot-row-2">
+    <div class="ftile ft-mark"><p class="wordmark" translate="no">Alejo</p></div>
+    <a class="ftile ft-cta" href="#demo"><span>Book a demo</span><svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square"/></svg></a>
+  </div>
+  <p class="credits">Pictures: <a href="https://commons.wikimedia.org/wiki/File:LAGOS_ISLAND_1.jpg">Lagos Island</a> by Sir Demo, <a href="https://creativecommons.org/licenses/by-sa/4.0">CC BY-SA 4.0</a>; <a href="https://commons.wikimedia.org/wiki/File:Aerial_view_of_victoria_island_in_Lagos,_Nigeria_with_habours_for_yatches.jpg">Victoria Island</a> and <a href="https://commons.wikimedia.org/wiki/File:Aerial_view_of_a_busy_tomato_market_in_Lagos_Nigeria.jpg">a tomato market</a> by Ayorinde Ogundele, CC BY-SA 4.0; <a href="https://commons.wikimedia.org/wiki/File:Lagos_Lagoon_-_Brothers_at_Dusk.jpg">Lagos Lagoon, Brothers at Dusk</a> by Obii Okongwu, CC BY-SA 4.0, all via Wikimedia Commons.</p>
+</footer>
+
+<script src="site.js" defer></script>
+</body>
+</html>

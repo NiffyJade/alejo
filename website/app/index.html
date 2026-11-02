@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Today · Alejo staff dashboard</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f3f5fa">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://api.fontshare.com">
+<link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body data-page="overview">
+<a class="skip" href="#main">Skip to content</a>
+<div class="app">
+<aside class="side" id="side" aria-label="Dashboard">
+  <a class="brand" href="/app/index.html" aria-label="Alejo, today"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0z" fill="#111"/><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="#111"/><circle cx="12" cy="6.2" r="2" fill="#1a4be0"/></svg><span class="brand-t"><b translate="no">Alejo</b></span></a>
+  <div class="scope"><b>BrightSide Hotel</b><span>Lagos, Nigeria</span></div>
+  <nav class="nav" aria-label="Pages"><a href="/app/index.html" aria-current="page">Today</a><a href="/app/inbox.html">Inbox <i class="cnt" id="needCount" role="img" aria-label="guests need you">3</i></a><a href="/app/bookings.html">Bookings</a><p class="nav-h">Your hotel</p><a href="/app/knowledge.html">Facts</a><a href="/app/settings.html">Settings</a></nav>
+  <div class="side-foot">
+    <div class="links"><a class="web-link" href="/">Website</a><span id="authSlot"></span></div>
+    <div class="me"><span class="acct" id="acct" title="Amaka Okafor, front desk">AO</span><span><b id="meName">Amaka Okafor</b><small id="meRole">Front desk, nights</small></span></div>
+  </div>
+</aside>
+<div class="scrim" id="scrim"></div>
+<div class="frame-main">
+  <header class="top">
+    <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="side">Menu</button>
+    <span class="top-name" translate="no">Alejo</span>
+    <div class="search"><label class="sr" for="q">Search</label><input id="q" name="q" type="search" placeholder="Search guests…" autocomplete="off" spellcheck="false"><kbd aria-hidden="true">/</kbd></div>
+    <span class="demo-note" id="demoNote">Sample data, Tue 27 Oct, 02:31</span>
+  </header>
+<main class="sheet" id="main">
+  <div class="title-row">
+    <div><h1>Today</h1><p class="sub" id="ovSub"></p></div>
+    <div class="actions"><a class="btn" id="ovCta" href="/app/inbox.html">Reply to guests</a></div>
+  </div>
+  <div class="kpis" id="ovKpis" role="group" aria-label="Today in numbers"></div>
+  <div class="ov-grid">
+    <section aria-labelledby="h-needs"><div class="blk-h"><h2 id="h-needs">Needs you</h2><a href="/app/inbox.html">Open inbox</a></div><div id="ovNeeds"></div></section>
+    <section aria-labelledby="h-move"><div class="blk-h"><h2 id="h-move">At the desk today</h2><a href="/app/bookings.html">All stays</a></div><div id="ovMove"></div></section>
+  </div>
+  <section class="timeline-blk" aria-labelledby="h-tl">
+    <div class="blk-h"><h2 id="h-tl">Stays, day by day</h2><div class="tl-legend" id="tlLegend"></div></div>
+    <div class="tl" id="ovTimeline"></div>
+  </section>
+</main>
+</div>
+</div>
+
+<script src="/app/data.js"></script>
+<script src="/app/live.js"></script>
+<script src="/app/kb.js"></script>
+<script src="/app/app.js"></script>
+</body>
+</html>

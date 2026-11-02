@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Settings · Alejo staff dashboard</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f3f5fa">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://api.fontshare.com">
+<link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body data-page="settings">
+<a class="skip" href="#main">Skip to content</a>
+<div class="app">
+<aside class="side" id="side" aria-label="Dashboard">
+  <a class="brand" href="/app/index.html" aria-label="Alejo, today"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0z" fill="#111"/><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="#111"/><circle cx="12" cy="6.2" r="2" fill="#1a4be0"/></svg><span class="brand-t"><b translate="no">Alejo</b></span></a>
+  <div class="scope"><b>BrightSide Hotel</b><span>Lagos, Nigeria</span></div>
+  <nav class="nav" aria-label="Pages"><a href="/app/index.html">Today</a><a href="/app/inbox.html">Inbox <i class="cnt" id="needCount" role="img" aria-label="guests need you">3</i></a><a href="/app/bookings.html">Bookings</a><p class="nav-h">Your hotel</p><a href="/app/knowledge.html">Facts</a><a href="/app/settings.html" aria-current="page">Settings</a></nav>
+  <div class="side-foot">
+    <div class="links"><a class="web-link" href="/">Website</a><span id="authSlot"></span></div>
+    <div class="me"><span class="acct" id="acct" title="Amaka Okafor, front desk">AO</span><span><b id="meName">Amaka Okafor</b><small id="meRole">Front desk, nights</small></span></div>
+  </div>
+</aside>
+<div class="scrim" id="scrim"></div>
+<div class="frame-main">
+  <header class="top">
+    <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="side">Menu</button>
+    <span class="top-name" translate="no">Alejo</span>
+    <div class="search"><label class="sr" for="q">Search</label><input id="q" name="q" type="search" placeholder="Search settings…" autocomplete="off" spellcheck="false"><kbd aria-hidden="true">/</kbd></div>
+    <span class="demo-note" id="demoNote">Sample data, Tue 27 Oct, 02:31</span>
+  </header>
+<main class="sheet" id="main">
+  <div class="title-row"><div><h1>Settings</h1><p class="sub">How Alejo works for BrightSide Hotel.</p></div></div>
+  <div class="sets">
+    <section class="sset" aria-labelledby="s1"><div><h2 id="s1">Hotel</h2><p class="d">The times guests are told, in Lagos time.</p></div>
+      <div class="panel"><div class="two"><div class="f"><label for="hn">Hotel name</label><input id="hn" name="hotel_name" autocomplete="off" value="BrightSide Hotel"></div><div class="f"><label for="tz">Time zone</label><select id="tz" name="time_zone"><option>Africa/Lagos (WAT)</option></select></div></div>
+        <div class="two f f-gap"><div class="f"><label for="ci">Check-in from</label><input id="ci" name="check_in" autocomplete="off" value="2:00 PM"></div><div class="f"><label for="co">Checkout by</label><input id="co" name="checkout" autocomplete="off" value="12:00 noon"></div></div>
+        <p class="p-gap"><button class="btn small" type="button" data-save>Save</button></p></div></section>
+    <section class="sset" aria-labelledby="s2"><div><h2 id="s2">Channels</h2><p class="d">Where guests reach you. Replies from staff go back through the same channel.</p></div>
+      <div class="panel">
+        <div class="srow"><div><div class="t">Phone <span class="pill pos">Connected</span></div><p class="d">+234 800 000 0000 (sample). Answers calls and takes bookings.</p></div><button class="tog" type="button" role="switch" aria-checked="true" aria-label="Phone on"></button></div>
+        <div class="srow"><div><div class="t">Telegram <span class="pill pos">Connected</span></div><p class="d">Guests tap Start from their booking link, or share their number once.</p></div><button class="tog" type="button" role="switch" aria-checked="true" aria-label="Telegram on"></button></div>
+        <div class="srow"><div><div class="t">WhatsApp <span class="pill">Next</span></div><p class="d">Not released yet. We will switch it on for your hotel when it is.</p></div><button class="tog" type="button" role="switch" aria-checked="false" aria-label="WhatsApp on" disabled></button></div>
+      </div></section>
+    <section class="sset" aria-labelledby="s3"><div><h2 id="s3">Staff alerts</h2><p class="d">Who hears when the AI does not know. Reply in the group and the guest gets it.</p></div>
+      <div class="panel"><ul class="staff-list">
+        <li><span class="disc" style="--h:212">AO</span><div class="grow"><b>Amaka Okafor</b><p class="d">Front desk, nights</p></div><button class="tog" type="button" role="switch" aria-checked="true" aria-label="Amaka alerts"></button></li>
+        <li><span class="disc" style="--h:38">TB</span><div class="grow"><b>Tunde Bello</b><p class="d">Front desk, days</p></div><button class="tog" type="button" role="switch" aria-checked="true" aria-label="Tunde alerts"></button></li>
+        <li><span class="disc" style="--h:152">CE</span><div class="grow"><b>Chidi Eze</b><p class="d">Duty manager</p></div><button class="tog" type="button" role="switch" aria-checked="true" aria-label="Chidi alerts"></button></li>
+      </ul></div></section>
+    <section class="sset" aria-labelledby="s4"><div><h2 id="s4">Voice and languages</h2><p class="d">How the phone line sounds and what it does with callers it cannot follow.</p></div>
+      <div class="panel">
+        <div class="f"><label for="vl">Voice</label><select id="vl" name="voice"><option>Nigerian English, female</option></select><p class="help">Understands Nigerian English and Pidgin, and Yoruba-accented English.</p></div>
+        <div class="srow s-top"><div><div class="t">Hand over callers it cannot follow</div><p class="d">After two tries, or when a caller speaks only another language, staff are alerted with the caller's number.</p></div><button class="tog" type="button" role="switch" aria-checked="true" aria-label="Hand over callers"></button></div>
+        <div class="srow"><div><div class="t">Say the Telegram step after a phone booking</div><p class="d">Asks the caller to open Telegram and share their number once.</p></div><button class="tog" type="button" role="switch" aria-checked="true" aria-label="Telegram step"></button></div>
+      </div></section>
+    <section class="sset" aria-labelledby="s5"><div><h2 id="s5">Plan and usage</h2><p class="d">Hotel plan. Voice minutes beyond the included 400 are billed per minute.</p></div>
+      <div class="panel"><div class="usage"><div><b id="u-used"></b><span>voice minutes used this month</span></div><div><b id="u-left"></b><span>minutes included and left</span></div><div><b id="u-bill"></b><span>this month so far</span></div></div></div></section>
+  </div>
+</main>
+</div>
+</div>
+
+<script src="/app/data.js"></script>
+<script src="/app/live.js"></script>
+<script src="/app/app.js"></script>
+</body>
+</html>

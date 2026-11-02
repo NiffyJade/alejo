@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bookings · Alejo staff dashboard</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f3f5fa">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://api.fontshare.com">
+<link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body data-page="bookings">
+<a class="skip" href="#main">Skip to content</a>
+<div class="app">
+<aside class="side" id="side" aria-label="Dashboard">
+  <a class="brand" href="/app/index.html" aria-label="Alejo, today"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0z" fill="#111"/><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="#111"/><circle cx="12" cy="6.2" r="2" fill="#1a4be0"/></svg><span class="brand-t"><b translate="no">Alejo</b></span></a>
+  <div class="scope"><b>BrightSide Hotel</b><span>Lagos, Nigeria</span></div>
+  <nav class="nav" aria-label="Pages"><a href="/app/index.html">Today</a><a href="/app/inbox.html">Inbox <i class="cnt" id="needCount" role="img" aria-label="guests need you">3</i></a><a href="/app/bookings.html" aria-current="page">Bookings</a><p class="nav-h">Your hotel</p><a href="/app/knowledge.html">Facts</a><a href="/app/settings.html">Settings</a></nav>
+  <div class="side-foot">
+    <div class="links"><a class="web-link" href="/">Website</a><span id="authSlot"></span></div>
+    <div class="me"><span class="acct" id="acct" title="Amaka Okafor, front desk">AO</span><span><b id="meName">Amaka Okafor</b><small id="meRole">Front desk, nights</small></span></div>
+  </div>
+</aside>
+<div class="scrim" id="scrim"></div>
+<div class="frame-main">
+  <header class="top">
+    <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="side">Menu</button>
+    <span class="top-name" translate="no">Alejo</span>
+    <div class="search"><label class="sr" for="q">Search</label><input id="q" name="q" type="search" placeholder="Search stays…" autocomplete="off" spellcheck="false"><kbd aria-hidden="true">/</kbd></div>
+    <span class="demo-note" id="demoNote">Sample data, Tue 27 Oct, 02:31</span>
+  </header>
+<main class="sheet" id="main">
+  <div class="title-row">
+    <div><h1>Bookings</h1><p class="sub">Every stay, from booking to thank-you.</p></div>
+    <div class="actions"><button class="btn line" type="button" id="bexport">Export CSV</button></div>
+  </div>
+  <div class="sum" id="bsum" aria-label="Today"></div>
+  <div class="tabs" role="tablist" id="btabs" aria-label="Views"></div>
+  <div class="toolbar">
+    <label class="sr" for="bq">Search stays</label><input class="field" id="bq" type="search" placeholder="Search guest, room or reference…" autocomplete="off" spellcheck="false">
+    <div class="meta"><span id="bmeta"></span><label class="sr" for="bsort">Sort by</label><select id="bsort" name="sort"><option value="prio">Sort: today first</option><option value="in">Sort: check-in</option><option value="name">Sort: name</option><option value="total">Sort: total</option></select></div>
+  </div>
+  <div class="tbl" role="table" aria-label="Stays">
+    <div class="th cols-b" role="row"><div>Guest</div><div>Room</div><div>Dates</div><div>Stay journey</div><div>Source</div><div class="num">Total</div></div>
+    <div id="bbody"></div>
+  </div>
+  <p class="foot-note">Totals are nights times the room rate. The journey shows booked, reminder, checked in, checkout reminder, thanked.</p>
+</main>
+</div>
+</div>
+
+<script src="/app/data.js"></script>
+<script src="/app/live.js"></script>
+<script src="/app/app.js"></script>
+</body>
+</html>

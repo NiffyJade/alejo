@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Facts · Alejo staff dashboard</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f3f5fa">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://api.fontshare.com">
+<link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body data-page="facts">
+<a class="skip" href="#main">Skip to content</a>
+<div class="app">
+<aside class="side" id="side" aria-label="Dashboard">
+  <a class="brand" href="/app/index.html" aria-label="Alejo, today"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0z" fill="#111"/><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="#111"/><circle cx="12" cy="6.2" r="2" fill="#1a4be0"/></svg><span class="brand-t"><b translate="no">Alejo</b></span></a>
+  <div class="scope"><b>BrightSide Hotel</b><span>Lagos, Nigeria</span></div>
+  <nav class="nav" aria-label="Pages"><a href="/app/index.html">Today</a><a href="/app/inbox.html">Inbox <i class="cnt" id="needCount" role="img" aria-label="guests need you">3</i></a><a href="/app/bookings.html">Bookings</a><p class="nav-h">Your hotel</p><a href="/app/knowledge.html" aria-current="page">Facts</a><a href="/app/settings.html">Settings</a></nav>
+  <div class="side-foot">
+    <div class="links"><a class="web-link" href="/">Website</a><span id="authSlot"></span></div>
+    <div class="me"><span class="acct" id="acct" title="Amaka Okafor, front desk">AO</span><span><b id="meName">Amaka Okafor</b><small id="meRole">Front desk, nights</small></span></div>
+  </div>
+</aside>
+<div class="scrim" id="scrim"></div>
+<div class="frame-main">
+  <header class="top">
+    <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="side">Menu</button>
+    <span class="top-name" translate="no">Alejo</span>
+    <div class="search"><label class="sr" for="q">Search</label><input id="q" name="q" type="search" placeholder="Search answers…" autocomplete="off" spellcheck="false"><kbd aria-hidden="true">/</kbd></div>
+    <span class="demo-note" id="demoNote">Sample data, Tue 27 Oct, 02:31</span>
+  </header>
+<main class="sheet" id="main">
+  <div class="title-row">
+    <div><h1>Facts</h1><p class="sub" id="ksub"></p></div>
+    <div class="actions"><button class="btn" type="button" id="kadd">Add a fact</button></div>
+  </div>
+  <p class="sr" id="klive" role="status" aria-live="polite"></p>
+  <form class="missing" id="addform" hidden>
+    <h2>Add a fact</h2><p class="lead">Write a question guests ask and the answer they should get. Guests get exactly what you write here.</p>
+    <div class="fgrid two-up">
+      <div><label for="aq">Question</label><div class="ff"><input id="aq" name="question" type="text" autocomplete="off" placeholder="Is there a swimming pool?…"></div></div>
+      <div><label for="aa">Answer</label><div class="ff"><input id="aa" name="answer" type="text" autocomplete="off" placeholder="Yes, the pool is open 7:00 AM to 8:00 PM.…"><button class="btn small" type="submit">Add</button></div></div>
+    </div>
+  </form>
+  <section class="missing" id="missing" aria-labelledby="mh">
+    <h2 id="mh">Facts to fill in <span id="mcount" class="count-soft"></span></h2>
+    <p class="lead">Until a fact is filled in, every answer that needs it is held back and the question goes to your staff.</p>
+    <div class="fgrid" id="mgrid"></div>
+  </section>
+  <div class="tabs" role="tablist" id="ktabs" aria-label="Views"></div>
+  <div class="toolbar">
+    <label class="sr" for="kq">Search answers</label><input class="field" id="kq" type="search" placeholder="Search questions…" autocomplete="off" spellcheck="false">
+    <div class="meta"><span id="kmeta"></span></div>
+  </div>
+  <div class="tbl" role="table" aria-label="Answers">
+    <div class="th cols-k" role="row"><div>Question</div><div>Topic</div><div>Source</div><div>Status</div><div></div></div>
+    <div id="kbody"></div>
+  </div>
+  <section class="details-sec" id="hdetails" aria-labelledby="hd">
+    <h2 id="hd">Hotel details <span id="hdcount" class="count-soft"></span></h2>
+    <p class="lead">The values guests are told, like the Wi-Fi password or your address. Change one and every answer that uses it changes. Clear one and those answers are held back until you fill it in again.</p>
+    <div class="dlist" id="dlist" role="table" aria-label="Hotel details"></div>
+  </section>
+</main>
+</div>
+</div>
+
+<script src="/app/data.js"></script>
+<script src="/app/live.js"></script>
+<script src="/app/kb.js"></script>
+<script src="/app/app.js"></script>
+</body>
+</html>

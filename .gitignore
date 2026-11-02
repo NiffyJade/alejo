@@ -1,0 +1,30 @@
+# secrets and local config: never commit
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+token.json
+
+# local tools, caches and build output
+.tmp/
+.vercel/
+.vscode/
+.playwright-cli/
+node_modules/
+__pycache__/
+*.pyc
+
+# generated videos and design-tool working files (large, and regenerated)
+brag-output*/
+website/.taste-skill/
+website/.playwright-cli/
+
+# the old design, kept locally as a backup only
+website/_v1/
+
+# unused Cloudflare relay (the Supabase relay is the one in use); contains a secret
+cloudflare/
+
+# the template with names only is fine to commit
+!.env.example
