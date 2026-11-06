@@ -97,8 +97,8 @@
     // stays, day by day: rooms down the side, days across, each state its own mark
     const vw = innerWidth, N = vw < 600 ? 6 : vw < 1000 ? 8 : 10, first = FD.day(today) - (N === 10 ? 3 : 1), last = first + N - 1;   // fewer days on a phone, so it fits without sideways scrolling
     const compact = vw < 600, shortName = (n) => { const p = n.split(' '); return p.length > 1 ? p[0] + ' ' + p[p.length - 1][0] + '.' : n; };
-    const WORD = { in: 'In house', arr: 'Arriving', done: 'Thanked', ph: 'Not on Telegram' };
-    const KIND = (b) => (b.stage === 4 ? 'done' : b.linked === false && b.stage === 0 ? 'ph' : b.stage >= 2 ? 'in' : 'arr');
+    const WORD = { in: 'In house', arr: 'Arriving', done: 'Checked out', ph: 'Not on Telegram' };
+    const KIND = (b) => (b.stage >= 4 ? 'done' : b.linked === false && b.stage === 0 ? 'ph' : b.stage >= 2 ? 'in' : 'arr');
     const typeOrder = Object.keys(FD.RATES), RANK = { in: 0, arr: 1, ph: 2, done: 3 };
     const rows = B.filter((b) => FD.day(b.out) > first && FD.day(b.in) <= last)
       .sort((a, b) => typeOrder.indexOf(a.type) - typeOrder.indexOf(b.type) || RANK[KIND(a)] - RANK[KIND(b)] || String(a.room).localeCompare(String(b.room), undefined, { numeric: true }));
@@ -252,7 +252,7 @@
       tabsEl.replaceChildren(...labels.map(([id, l]) => h('button', { class: 'tab', role: 'tab', type: 'button', 'aria-selected': String(tab === id), onclick: () => { tab = id; remember('tab', id); paint(); } }, l, h('span', { class: 'n', text: String(sets[id].length) }))));
       let list = sets[tab].filter((b) => !q || (b.guest + ' ' + b.room + ' ' + b.ref).toLowerCase().includes(q));
       const key = sortEl.value;
-      const rank = (b) => (b.stage === 4 ? 3 : b.in === today ? 0 : b.stage >= 2 ? 1 : 2);   // today's arrivals, then in house, then coming up, then done
+      const rank = (b) => (b.stage >= 4 ? 3 : b.in === today ? 0 : b.stage >= 2 ? 1 : 2);   // today's arrivals, then in house, then coming up, then done
       list = [...list].sort((a, b) => key === 'name' ? a.guest.localeCompare(b.guest) : key === 'total' ? b.total - a.total : key === 'in' ? a.in.localeCompare(b.in) || a.guest.localeCompare(b.guest) : rank(a) - rank(b) || a.in.localeCompare(b.in));
       meta.textContent = `${list.length} stay${list.length === 1 ? '' : 's'}, ${FD.naira(list.reduce((s, b) => s + b.total, 0))}`;
       body.replaceChildren(...(list.length ? list.map((b) => h('div', { class: 'tr cols-b', role: 'row' },

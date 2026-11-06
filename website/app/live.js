@@ -70,8 +70,9 @@
 
     const bookings = rows.bookings.filter((b) => b.status !== 'cancelled' && guests[b.guest_id]).map((b) => {
       const g = guests[b.guest_id];
-      const stage = b.thanks_sent_at ? 4 : (b.checkout_reminder_sent_at || b.status === 'checked_out') ? 3 : b.checked_in_at ? 2 : b.reminder_sent_at ? 1 : 0;
-      const when = [b.thanks_sent_at && ['Thank-you sent', b.thanks_sent_at], b.checkout_reminder_sent_at && ['Checkout reminder', b.checkout_reminder_sent_at], b.checked_in_at && ['Checked in', b.checked_in_at], b.reminder_sent_at && ['Reminder sent', b.reminder_sent_at], ['Booked', b.created_at]].find(Boolean);
+      // 4 = checked out (guest tapped Check out, or the scheduler closed the stay); 5 = thanked. A checked-out guest is no longer in house.
+      const stage = b.thanks_sent_at ? 5 : b.status === 'checked_out' ? 4 : b.checkout_reminder_sent_at ? 3 : b.checked_in_at ? 2 : b.reminder_sent_at ? 1 : 0;
+      const when = [b.thanks_sent_at && ['Thank-you sent', b.thanks_sent_at], b.status === 'checked_out' && ['Checked out', b.checked_out_at || b.created_at], b.checkout_reminder_sent_at && ['Checkout reminder', b.checkout_reminder_sent_at], b.checked_in_at && ['Checked in', b.checked_in_at], b.reminder_sent_at && ['Reminder sent', b.reminder_sent_at], ['Booked', b.created_at]].find(Boolean);
       const nights = dayNum(b.check_out) - dayNum(b.check_in);
       return { id: b.id, ref: b.id.slice(0, 8).toUpperCase(), guest: g.name, guestId: g.id, room: b.room_number || 'not assigned', type: b.room_type || 'Room', in: b.check_in, out: b.check_out,
         created: b.created_at, src: g.telegram_chat_id ? 'Telegram' : 'Phone', stage, note: when[0] + ' ' + stamp(when[1]), linked: !!g.telegram_chat_id, hue: hue(g.name), nights, total: nights * (RATES[b.room_type] || 0) };

@@ -4,8 +4,8 @@
   'use strict';
   const NOW = { date: '2026-10-27', time: '02:31', label: 'Tue 27 Oct, 02:31' };
   const RATES = { Standard: 35000, Deluxe: 55000, Suite: 95000 };      // naira per night (sample)
-  const STAGES = ['Booked', 'Reminded', 'Checked in', 'Checkout reminder', 'Thanked'];
-  const STAGE_WORD = ['Booked', 'Reminder sent', 'In house', 'Checkout due', 'Thanked'];
+  const STAGES = ['Booked', 'Reminded', 'Checked in', 'Checkout reminder', 'Checked out', 'Thanked'];
+  const STAGE_WORD = ['Booked', 'Reminder sent', 'In house', 'Checkout due', 'Checked out', 'Thanked'];
 
   const day = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 86400000;
   const nights = (b) => day(b.out) - day(b.in);
@@ -14,7 +14,7 @@
   const NGN = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
   const naira = (n) => NGN.format(n);
 
-  // stage: 0 booked, 1 reminder sent, 2 checked in, 3 checkout reminder sent, 4 thanked
+  // stage: 0 booked, 1 reminder sent, 2 checked in, 3 checkout reminder sent, 4 checked out, 5 thanked
   const bookings = [
     { id: 'b1',  ref: 'AL-1031', guest: 'Folake Johnson',  room: '208', type: 'Deluxe',   in: '2026-10-26', out: '2026-10-28', src: 'Telegram', stage: 2, note: 'Checked in 26 Oct, 15:20' },
     { id: 'b2',  ref: 'AL-1038', guest: 'Chinedu Okafor',  room: '301', type: 'Suite',    in: '2026-10-27', out: '2026-10-29', src: 'Telegram', stage: 1, note: 'Reminder sent 26 Oct, 10:00' },
@@ -28,7 +28,7 @@
     { id: 'b10', ref: 'AL-1041', guest: 'Blessing Okoro',  room: '118', type: 'Standard', in: '2026-10-27', out: '2026-10-28', src: 'Phone',    stage: 0, note: 'Booked by phone today, 00:55', linked: false },
     { id: 'b11', ref: 'AL-1018', guest: 'Kunle Adebayo',   room: '211', type: 'Deluxe',   in: '2026-10-25', out: '2026-10-27', src: 'Telegram', stage: 3, note: 'Checkout reminder at 08:00' },
     { id: 'b12', ref: 'AL-1045', guest: 'Adaeze Obi',      room: '101', type: 'Standard', in: '2026-10-31', out: '2026-11-02', src: 'Phone',    stage: 0, note: 'Booked by phone 25 Oct, 16:40', linked: false },
-    { id: 'b13', ref: 'AL-1009', guest: 'Musa Garba',      room: '206', type: 'Deluxe',   in: '2026-10-24', out: '2026-10-26', src: 'Telegram', stage: 4, note: 'Thank-you sent 26 Oct, 12:20' },
+    { id: 'b13', ref: 'AL-1009', guest: 'Musa Garba',      room: '206', type: 'Deluxe',   in: '2026-10-24', out: '2026-10-26', src: 'Telegram', stage: 5, note: 'Thank-you sent 26 Oct, 12:20' },
     { id: 'b14', ref: 'AL-1029', guest: 'Funmi Ajayi',     room: '110', type: 'Standard', in: '2026-10-26', out: '2026-10-27', src: 'Telegram', stage: 2, note: 'Late checkout agreed, until 2 PM' },
   ];
   const HUES = [212, 18, 152, 332, 58, 268, 100, 0, 190, 298, 38, 240, 128, 352];
