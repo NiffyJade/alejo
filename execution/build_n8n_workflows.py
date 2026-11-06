@@ -261,7 +261,8 @@ def telegram_bot():
         "options": {"timeout": 45000}}, (2240, -60), ver=4.2, creds=C["co"], onError="continueRegularOutput")
     parse = code(w, "Parse AI", booking_js("parse_ai.js"), (2460, -60))
     plan = code(w, "Plan booking", booking_js("plan_booking.js"), (2680, -60))
-    avail = http(w, "Availability RPC", "POST", "=" + SB + "/rpc/room_availability", (2900, -60),
+    # bot_availability = room_availability + "the answer is ready" marker that stops the typing helper (no extra round trip)
+    avail = http(w, "Availability RPC", "POST", "=" + SB + "/rpc/bot_availability", (2900, -60),
                  body="={{ JSON.stringify($json.rpc) }}", always=True, once=True, onError="continueRegularOutput")
     comp = code(w, "Compose reply", booking_js("compose_reply.js"), (3120, -60))
     esc = if_node(w, "Needs staff?", "={{ $json.escalate }}", "boolean", "true", (3340, -60))
@@ -310,9 +311,12 @@ def telegram_bot():
                     "text: " + CR + ".reply, created_at: new Date().toISOString() }]) }}")
     w.link(sw, ctx, 3)
     # "typing..." in the guest's Telegram while the answer is being worked out (side branches: they never change the data flow)
-    typing1 = w.add("Show typing", "n8n-nodes-base.telegram",
-                    {"resource": "message", "operation": "sendChatAction", "chatId": "={{ $json.chat_id }}", "action": "typing"},
-                    (480, -140), ver=1.2, creds=C["tg"], onError="continueRegularOutput")
+    # Telegram shows "typing..." for only 5 seconds per signal, so the "Typing Keepalive" workflow (below) sends it again every
+    # few seconds until the bot is ready to reply. The helper is started internally and NOT waited for, so it adds ~no delay
+    # (calling its webhook instead cost 1.2s of connection time per message, and a short timeout never reached it).
+    typing1 = w.add("Keep typing", "n8n-nodes-base.executeWorkflow", {
+        "source": "database", "workflowId": {"__rl": True, "value": workflow_id("Hotel Guest Journey - Typing Keepalive"), "mode": "id"},
+        "options": {"waitForSubWorkflow": False}}, (480, -140), ver=1.2, onError="continueRegularOutput")
     w.link(sw, typing1, 3)
     w.chain(ctx, bp, llm, parse, plan, avail, comp, esc)
     w.link(esc, post_staff, 0)
@@ -929,6 +933,65 @@ def typing_signal():
     return w
 
 
+def workflow_id(name):
+    """Id of an existing workflow by name (the typing helper must be created before the bot that starts it)."""
+    for x in api("GET", "/workflows?limit=250")["data"]:
+        if x["name"] == name:
+            return x["id"]
+    sys.exit(f"workflow not found yet: {name} (build it first)")
+
+
+def keepalive_path():
+    """Unguessable webhook path of the typing helper (created once, kept in .env as KEEPALIVE_PATH)."""
+    path = ENV.get("KEEPALIVE_PATH")
+    if not path:
+        path = "alejo-keepalive-" + secrets.token_urlsafe(18)
+        with open(ROOT / ".env", "a", encoding="utf-8") as f:
+            f.write(f"KEEPALIVE_PATH={path}\n")
+        ENV["KEEPALIVE_PATH"] = path
+        print("created KEEPALIVE_PATH in .env")
+    return path
+
+
+# ============================================================ 8. Typing keepalive
+def typing_keepalive():
+    """Started by the Telegram bot for every guest message. Shows "typing..." at once, then again every ~3.5 seconds, until the
+    bot marks the answer as ready (bot_availability sets bot_typing.finished_at just before the reply is composed and sent).
+    Gives up after about 30 seconds so a failed run can never leave it typing for ever."""
+    w = WF("Hotel Guest Journey - Typing Keepalive")
+    w.fast = True
+    chat = "$('Chat').first().json.chat_id"
+    hook = w.add("Webhook", "n8n-nodes-base.webhook",
+                 {"httpMethod": "POST", "path": keepalive_path(), "responseMode": "onReceived", "options": {}},
+                 (0, 300), ver=2.1, webhookId=str(uuid.uuid4()))
+    sub_trigger = w.add("Called by the bot", "n8n-nodes-base.executeWorkflowTrigger", {"inputSource": "passthrough"}, (0, 460), ver=1.1)
+    norm = code(w, "Chat", "const j = $input.first().json; return [{ json: { chat_id: j.body ? j.body.chat_id : j.chat_id } }];", (220, 380))
+    now = w.add("Typing now", "n8n-nodes-base.telegram",
+                {"resource": "message", "operation": "sendChatAction", "chatId": "={{ $json.chat_id }}", "action": "typing"},
+                (440, 380), ver=1.2, creds=C["tg"], onError="continueRegularOutput")
+    start = http(w, "Mark start", "POST", "=" + SB + "/bot_typing?on_conflict=chat_id", (660, 380),
+                 body="={{ JSON.stringify({ chat_id: " + chat + ", started_at: new Date().toISOString(), finished_at: null }) }}",
+                 prefer="resolution=merge-duplicates,return=minimal", onError="continueRegularOutput")
+    ticks = code(w, "Ticks", "return Array.from({ length: 8 }, (_, i) => ({ json: { tick: i + 1 } }));", (660, 300))
+    loop = w.add("Loop", "n8n-nodes-base.splitInBatches", {"batchSize": 1, "options": {}}, (880, 300), ver=3)
+    wait = w.add("Wait", "n8n-nodes-base.wait", {"resume": "timeInterval", "amount": 2, "unit": "seconds"},
+                 (1100, 400), ver=1.1, webhookId=str(uuid.uuid4()))
+    check = http(w, "Check answer ready", "GET", "=" + SB + "/bot_typing?chat_id=eq.{{ " + chat + " }}&select=finished_at",
+                 (1320, 400), always=True, onError="continueRegularOutput")
+    working = if_node(w, "Still working?", "={{ $json.finished_at || '' }}", "string", "empty", (1540, 400))
+    again = w.add("Typing again", "n8n-nodes-base.telegram",
+                  {"resource": "message", "operation": "sendChatAction", "chatId": "={{ " + chat + " }}", "action": "typing"},
+                  (1760, 340), ver=1.2, creds=C["tg"], onError="continueRegularOutput")
+    w.link(hook, norm)
+    w.link(sub_trigger, norm)
+    w.chain(norm, now, start, ticks, loop)
+    w.link(loop, wait, 1)
+    w.chain(wait, check, working)
+    w.link(working, again, 0)
+    w.link(again, loop)
+    return w
+
+
 def upsert(w):
     existing = {x["name"]: x["id"] for x in api("GET", "/workflows?limit=250")["data"]}
     body = w.body()
@@ -943,9 +1006,9 @@ def upsert(w):
 
 if __name__ == "__main__":
     ids = {}
-    ONLY = {"--only-telegram": (telegram_bot,), "--only-vapi": (vapi_tools,), "--only-demo-alert": (demo_alert,), "--only-dashboard-reply": (dashboard_reply,), "--only-typing": (typing_signal,)}
+    ONLY = {"--only-keepalive": (typing_keepalive,), "--only-telegram": (telegram_bot,), "--only-vapi": (vapi_tools,), "--only-demo-alert": (demo_alert,), "--only-dashboard-reply": (dashboard_reply,), "--only-typing": (typing_signal,)}
     picked = [b for flag, b in ONLY.items() if flag in sys.argv]
-    builds = picked[0] if picked else (telegram_bot, scheduler, booking_created, vapi_tools, demo_alert, dashboard_reply, typing_signal)
+    builds = picked[0] if picked else (typing_keepalive, telegram_bot, scheduler, booking_created, vapi_tools, demo_alert, dashboard_reply, typing_signal)
     for build in builds:
         wf = build()
         ids[wf.name] = upsert(wf)

@@ -54,4 +54,4 @@ const sameDraft = JSON.stringify([d.check_in, d.check_out, d.room_type, d.guest_
   JSON.stringify([old.check_in || null, old.check_out || null, old.room_type || null, old.guest_name || null, old.phone || null, !!old.phone_verified]);
 return [{ json: { ...a, draft_new: d, draft_cleared: cleared, draft_changed: !sameDraft, booking_flow: bookingIntent || cleared,
   problem, problem_arg: problemArg, unknown_room: unknownRoom, long_stay: longStay, nights, ready,
-  rpc: { p_check_in: ready ? d.check_in : today, p_check_out: ready ? d.check_out : addDays(today, 1), p_room_type: null } } }];
+  rpc: { p_check_in: ready ? d.check_in : today, p_check_out: ready ? d.check_out : addDays(today, 1), p_room_type: null, p_chat_id: a.chat_id } } }];
