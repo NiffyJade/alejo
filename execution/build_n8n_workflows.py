@@ -93,6 +93,7 @@ C = ensure_credentials()
 class WF:
     def __init__(self, name):
         self.name, self.nodes, self.conns = name, [], {}
+        self.fast = False      # latency-sensitive workflows (guest chat, phone) do not save execution state after every node
 
     def add(self, name, type_, params, pos, ver=1, creds=None, **extra):
         n = {"id": str(uuid.uuid4()), "name": name, "type": type_, "typeVersion": ver,
@@ -115,7 +116,7 @@ class WF:
 
     def body(self):
         return {"name": self.name, "nodes": self.nodes, "connections": self.conns,
-                "settings": {"executionOrder": "v1", "saveDataSuccessExecution": "all", "saveExecutionProgress": True}}
+                "settings": {"executionOrder": "v1", "saveDataSuccessExecution": "all", "saveExecutionProgress": not self.fast}}
 
 
 def code(w, name, js, pos):
@@ -127,7 +128,7 @@ def booking_js(filename):
     folder = ROOT / "execution" / "telegram_booking_js"
     return (folder / filename).read_text(encoding="utf-8") \
         .replace("// __LANG__", (folder / "lang.js").read_text(encoding="utf-8")) \
-        .replace("__HOTEL__", HOTEL_NAME).replace("__MODEL__", COHERE_MODEL)
+        .replace("__HOTEL__", HOTEL_NAME).replace("__MODEL__", COHERE_MODEL).replace("__STAFF__", str(STAFF_CHAT_ID))
 
 
 def http(w, name, method, url, pos, body=None, prefer=None, always=False, once=False, cred="sb", **extra):
@@ -181,9 +182,21 @@ def plain(text):
     return "=" + "".join(out)
 
 
-def tg_send(w, name, chat, text, pos, button=None, **extra):
+# The always-visible buttons under the Telegram chat box (a reply keyboard stays until it is replaced)
+MENU_ROWS = [["📋 My booking", "🛏 Check availability"], ["✅ Check in", "🚪 Check out"]]
+
+
+def menu_keyboard():
+    return {"replyMarkup": "replyKeyboard",
+            "replyKeyboard": {"rows": [{"row": {"buttons": [{"text": t, "additionalFields": {}} for t in row]}} for row in MENU_ROWS]},
+            "replyKeyboardOptions": {"resize_keyboard": True}}
+
+
+def tg_send(w, name, chat, text, pos, button=None, menu=False, **extra):
     p = {"resource": "message", "operation": "sendMessage", "chatId": chat, "text": plain(text),
          "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}
+    if menu:
+        p.update(menu_keyboard())
     if button:
         p["replyMarkup"] = "inlineKeyboard"
         p["inlineKeyboard"] = {"rows": [{"row": {"buttons": [
@@ -194,52 +207,15 @@ def tg_send(w, name, chat, text, pos, button=None, **extra):
 # ============================================================ 1. Telegram Bot
 def telegram_bot():
     w = WF("Hotel Guest Journey - Telegram Bot")
+    w.fast = True
     trig = w.add("Telegram Trigger", "n8n-nodes-base.telegramTrigger",
                  {"updates": ["message", "callback_query"], "additionalFields": {}}, (0, 400), ver=1.2,
                  creds=C["tg"], webhookId=str(uuid.uuid4()))
-    cls = code(w, "Classify", f"""
-const u = $input.first().json;
-const STAFF = {STAFF_CHAT_ID};
-const clean = (s, re) => String(s || '').replace(re, '');
-let out = {{ type: 'ignore' }};
-if (u.callback_query) {{
-  const q = u.callback_query, raw = String(q.data || '');
-  const [action, id] = raw.split(':');
-  if (/^bk(ok|no):/.test(raw)) {{
-    // Confirm / Cancel under a booking summary; the payload names the dates and room type that were summarised
-    if (q.message && q.message.chat.type === 'private')
-      out = {{ type: 'booking_cb', query_id: q.id, chat_id: q.message.chat.id, action, payload: raw.slice(raw.indexOf(':') + 1).slice(0, 60) }};
-  }} else {{
-    out = {{ type: 'callback', query_id: q.id, chat_id: q.message && q.message.chat.id,
-            action, booking_id: clean(id, /[^0-9a-f-]/g) }};
-  }}
-}} else if (u.message) {{
-  const m = u.message, text = (m.text || '').trim();
-  const fromName = [m.from && m.from.first_name, m.from && m.from.last_name].filter(Boolean).join(' ').slice(0, 60);
-  if (m.chat.id === STAFF) {{
-    if (m.reply_to_message && text) {{
-      const learn = /^#kb\\s+/i.test(text);
-      out = {{ type: 'staff_reply', reply_to: m.reply_to_message.message_id,
-              text: learn ? text.replace(/^#kb\\s+/i, '') : text, learn }};
-    }}
-  }} else if (m.chat.type === 'private' && m.contact) {{
-    const phone = String(m.contact.phone_number || '').replace(/\\D/g, '');
-    out = {{ type: 'contact', chat_id: m.chat.id, phone, from_name: fromName,
-            own: phone.length >= 7 && (!m.contact.user_id || m.contact.user_id === (m.from && m.from.id)) }};
-  }} else if (m.chat.type === 'private' && text) {{
-    const s = text.match(/^\\/start(?:\\s+(\\S+))?$/);
-    const token = s ? clean(s[1], /[^A-Za-z0-9_-]/g) : '';
-    if (s && token) out = {{ type: 'start', chat_id: m.chat.id, token }};
-    else if (s) out = {{ type: 'hello', chat_id: m.chat.id }};          // plain /start, no booking link
-    else out = {{ type: 'guest_message', chat_id: m.chat.id, text: text.slice(0, 1000), from_name: fromName }};
-  }}
-}}
-return [{{ json: out }}];
-""", (220, 400))
+    cls = code(w, "Classify", booking_js("classify.js"), (220, 400))
     w.link(trig, cls)
 
     rules = []
-    for t in ("start", "callback", "staff_reply", "guest_message", "contact", "booking_cb", "hello"):
+    for t in ("start", "callback", "staff_reply", "guest_message", "contact", "booking_cb", "hello", "menu", "mybooking"):
         rules.append({"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 3},
                                      "conditions": [cond("={{ $json.type }}", "string", "equals", t)], "combinator": "and"},
                       "renameOutput": True, "outputKey": t})
@@ -275,20 +251,8 @@ return [{{ json: out }}];
     # The model only reads intent and slot values (dates, room type, name, phone) out of the message; "Plan booking" and
     # "Compose reply" are plain code, and availability always comes from the live room_availability function.
     CR = "$('Compose reply').first().json"
-    fg = http(w, "Find guest", "GET",
-              "=" + SB + "/guests?telegram_chat_id=eq.{{ $('Classify').first().json.chat_id }}"
-              "&select=id,name,phone,bookings(id,room_number,room_type,check_in,check_out,status)",
-              (700, 0), always=True)
-    ld = http(w, "Load draft", "GET", "=" + SB + "/booking_drafts?chat_id=eq.{{ $('Classify').first().json.chat_id }}&select=*",
-              (920, 0), always=True, once=True)
-    kb = http(w, "Get knowledge", "GET", "=" + SB + "/knowledge_entries?select=id,category,question,answer", (1140, -60))
-    st = http(w, "Get settings", "GET", "=" + SB + "/hotel_settings?select=key,value", (1360, -60), once=True)
-    rm = http(w, "Get rooms", "GET", "=" + SB + "/room_types?active=eq.true&select=name,nightly_rate&order=nightly_rate.asc.nullslast",
-              (1580, -60), once=True, always=True)
-    hist = http(w, "Get recent messages", "GET",
-                "=" + SB + "/messages?{{ $('Find guest').first().json.id ? 'guest_id=eq.' + $('Find guest').first().json.id : 'id=eq.0' }}"
-                "&order=created_at.desc&limit=6&select=direction,text",
-                (1800, -60), once=True, always=True)
+    ctx = http(w, "Load context", "POST", "=" + SB + "/rpc/bot_context", (700, 0),
+               body="={{ JSON.stringify({ p_chat_id: $('Classify').first().json.chat_id }) }}", always=True)
     bp = code(w, "Build prompt", booking_js("build_prompt.js"), (2020, -60))
     llm = w.add("Ask Cohere", "n8n-nodes-base.httpRequest", {
         "method": "POST", "url": "https://api.cohere.com/v2/chat",
@@ -318,7 +282,7 @@ return [{{ json: out }}];
                             "renameOutput": True, "outputKey": key})
     style = w.add("Reply style", "n8n-nodes-base.switch", {"rules": {"values": style_rules}, "options": {"fallbackOutput": 0}},
                   (4000, -60), ver=3.4)
-    send_text = tg_send(w, "Send guest reply", "={{ " + CR + ".chat_id }}", "={{ " + CR + ".reply }}", (4220, -160))
+    send_text = tg_send(w, "Send guest reply", "={{ " + CR + ".chat_id }}", "={{ " + CR + ".reply }}", (4220, -160), menu=True)
     send_confirm = w.add("Send booking summary", "n8n-nodes-base.telegram", {
         "resource": "message", "operation": "sendMessage", "chatId": "={{ " + CR + ".chat_id }}",
         "text": plain("={{ " + CR + ".reply }}"),
@@ -344,17 +308,13 @@ return [{{ json: out }}];
                body="={{ JSON.stringify([{ guest_id: " + CR + ".guest_id, direction: 'in', text: " + CR + ".question, "
                     "created_at: new Date(Date.now() - 1000).toISOString() }, { guest_id: " + CR + ".guest_id, direction: 'out', "
                     "text: " + CR + ".reply, created_at: new Date().toISOString() }]) }}")
-    w.link(sw, fg, 3)
+    w.link(sw, ctx, 3)
     # "typing..." in the guest's Telegram while the answer is being worked out (side branches: they never change the data flow)
     typing1 = w.add("Show typing", "n8n-nodes-base.telegram",
                     {"resource": "message", "operation": "sendChatAction", "chatId": "={{ $json.chat_id }}", "action": "typing"},
                     (480, -140), ver=1.2, creds=C["tg"], onError="continueRegularOutput")
     w.link(sw, typing1, 3)
-    typing2 = w.add("Show typing before answer", "n8n-nodes-base.telegram",
-                    {"resource": "message", "operation": "sendChatAction", "chatId": "={{ $('Classify').first().json.chat_id }}", "action": "typing"},
-                    (2020, -200), ver=1.2, creds=C["tg"], onError="continueRegularOutput")
-    w.link(bp, typing2)
-    w.chain(fg, ld, kb, st, rm, hist, bp, llm, parse, plan, avail, comp, esc)
+    w.chain(ctx, bp, llm, parse, plan, avail, comp, esc)
     w.link(esc, post_staff, 0)
     w.chain(post_staff, save_esc, style)
     w.link(esc, style, 1)
@@ -376,42 +336,47 @@ return [{{ json: out }}];
               "=" + SB + "/bookings?id=eq.{{ $('Classify').first().json.booking_id }}&select=id,room_number,room_type,check_in,check_out,status,stay_code,guests(name,telegram_chat_id)",
               (920, 300), always=True)
     st2 = http(w, "Get settings (stay)", "GET", "=" + SB + "/hotel_settings?select=key,value", (1140, 300), once=True)
-    dec = code(w, "Decide", """
-const c = $('Classify').first().json;
-const b = $('Load booking').first().json;
-const s = Object.fromEntries($input.all().map(i => [i.json.key, (i.json.value || '').trim()]));
-const today = new Date(Date.now() + 3600 * 1000).toISOString().slice(0, 10);   // Africa/Lagos (UTC+1)
-const res = (text, patch) => [{ json: { chat_id: c.chat_id, text, patch: patch || null, booking_id: c.booking_id } }];
-if (!b.id || !b.guests || Number(b.guests.telegram_chat_id) !== Number(c.chat_id))
-  return res("Sorry, I couldn't find that booking for this chat. Please contact the front desk.");
-const now = new Date().toISOString();
-if (c.action === 'checkin') {
-  if (b.status === 'cancelled' || b.status === 'checked_out') return res('This booking is no longer active. Please contact the front desk.');
-  if (today < b.check_in) return res(`Check-in opens on ${b.check_in}. Tap the button again then and I'll send your stay code.`);
-  const lines = ["✅ You're checked in!", b.room_number ? `Room: ${b.room_number}` : 'Your room number will be confirmed by the front desk.',
-    `Your private stay code: ${b.stay_code}`];
-  if (s.WIFI_NAME && s.WIFI_PASSWORD) lines.push(`Wi-Fi: ${s.WIFI_NAME} / ${s.WIFI_PASSWORD}`);
-  lines.push('Keep this code private. Message me any time if you need anything.');
-  return res(lines.join('\\n'), b.status === 'checked_in' ? null : { status: 'checked_in', checked_in_at: now });
-}
-if (c.action === 'checkout') {
-  if (b.status === 'checked_out') return res("You're already checked out. Safe travels!");
-  if (b.status !== 'checked_in') return res("I can't check you out because you haven't checked in yet. Please see the front desk.");
-  return res(`Thank you for staying with us, ${b.guests.name}! You're checked out. Please settle any outstanding charges at the front desk and drop off your key. Safe travels!`,
-    { status: 'checked_out', checked_out_at: now });
-}
-return res("Sorry, I didn't understand that button.");
-""", (1360, 300))
+    dec = code(w, "Decide", booking_js("decide_stay.js"), (1360, 300))
     needs = if_node(w, "Update booking?", "={{ $json.patch }}", "object", "notEmpty", (1580, 300))
     upd = http(w, "Update booking status", "PATCH", "=" + SB + "/bookings?id=eq.{{ $json.booking_id }}", (1800, 240),
                body="={{ JSON.stringify($json.patch) }}", prefer="return=minimal")
     cb_send = tg_send(w, "Send stay reply", "={{ $('Decide').first().json.chat_id }}",
-                      "={{ $('Decide').first().json.text }}", (2020, 300))
+                      "={{ $('Decide').first().json.text }}", (2020, 300), menu=True)
     w.link(sw, ack, 1)
     w.chain(ack, lb, st2, dec, needs)
     w.link(needs, upd, 0)
     w.link(upd, cb_send)
     w.link(needs, cb_send, 1)
+
+    # ---- MENU: the Check in / Check out buttons (or typing them) and "what is my booking id?". No AI involved: instant.
+    fmb = http(w, "Find my bookings", "GET",
+               "=" + SB + "/bookings?select=id,room_number,room_type,check_in,check_out,status,stay_code,guests!inner(name,telegram_chat_id)"
+               "&guests.telegram_chat_id=eq.{{ $('Classify').first().json.chat_id }}&status=in.(booked,checked_in)"
+               "&check_out=gte.{{ new Date(Date.now() + 3600000).toISOString().slice(0, 10) }}&order=check_in.asc&limit=5",
+               (700, 2000), always=True)
+    shown = if_node(w, "Show my booking?", "={{ $('Classify').first().json.type }}", "string", "equals", (920, 2000), right="mybooking")
+    pickb = code(w, "Pick my booking", booking_js("pick_booking.js"), (1140, 2100))
+    mybk = code(w, "Compose my booking", booking_js("my_booking.js"), (1140, 1950))
+    haveb = if_node(w, "Has booking?", "={{ $json.markup }}", "string", "equals", (1360, 1950), right="menu")
+    my_send = tg_send(w, "Send my booking", "={{ $('Classify').first().json.chat_id }}", "={{ $('Compose my booking').first().json.text }}",
+                      (1580, 1900), menu=True)
+    my_phone = w.add("Ask for phone number (my booking)", "n8n-nodes-base.telegram", {
+        "resource": "message", "operation": "sendMessage", "chatId": "={{ $('Classify').first().json.chat_id }}",
+        "text": plain("={{ $('Compose my booking').first().json.text }}"),
+        "replyMarkup": "replyKeyboard",
+        "replyKeyboard": {"rows": [{"row": {"buttons": [
+            {"text": "📱 Share my phone number", "additionalFields": {"request_contact": True}}]}}]},
+        "replyKeyboardOptions": {"resize_keyboard": True, "one_time_keyboard": True},
+        "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}, (1580, 2000), ver=1.2, creds=C["tg"])
+    w.link(sw, fmb, 7)
+    w.link(sw, fmb, 8)
+    w.chain(fmb, shown)
+    w.link(shown, mybk, 0)
+    w.link(shown, pickb, 1)
+    w.link(pickb, st2)
+    w.chain(mybk, haveb)
+    w.link(haveb, my_send, 0)
+    w.link(haveb, my_phone, 1)
 
     # ---- STAFF REPLY: forward to guest, mark answered, optionally learn
     fe = http(w, "Find open escalation", "GET",
@@ -469,9 +434,9 @@ return res("Sorry, I didn't understand that button.");
     w.chain(attach, fgp, gfound)
     w.link(gfound, plink, 0)
     w.chain(plink, pok, mid1)
-    w.link(mid1, fg, 0)
+    w.link(mid1, ctx, 0)
     w.link(gfound, mid2, 1)
-    w.link(mid2, fg, 0)
+    w.link(mid2, ctx, 0)
     w.link(mid2, pno, 1)
 
     # ---- BOOKING BUTTONS: Confirm / Cancel under a booking summary
@@ -490,7 +455,7 @@ return res("Sorry, I didn't understand that button.");
     brpc = http(w, "Book room", "POST", "=" + SB + "/rpc/telegram_book_room", (1580, 1400),
                 body="={{ JSON.stringify($json.body) }}", always=True, onError="continueRegularOutput")
     bres = code(w, "Booking result", booking_js("booking_result.js"), (1800, 1400))
-    bsend = tg_send(w, "Send booking result", "={{ $('Classify').first().json.chat_id }}", "={{ $('Booking result').first().json.text }}", (2020, 1400))
+    bsend = tg_send(w, "Send booking result", "={{ $('Classify').first().json.chat_id }}", "={{ $('Booking result').first().json.text }}", (2020, 1400), menu=True)
     bhas = if_node(w, "Alert staff?", "={{ $('Booking result').first().json.staff }}", "string", "notEmpty", (2240, 1400))
     balert = tg_send(w, "Alert staff (booking)", str(STAFF_CHAT_ID), "={{ $('Booking result').first().json.staff }}", (2460, 1340),
                      onError="continueRegularOutput")
@@ -512,7 +477,8 @@ return res("Sorry, I didn't understand that button.");
     hello = tg_send(w, "Say hello", "={{ $json.chat_id }}",
                     f"Hello! I'm the virtual receptionist for {HOTEL_NAME}. 👋\n\n"
                     "I can check which rooms are free for your dates, book a room for you, and answer questions about the hotel.\n\n"
-                    "Try: \"Do you have a room this Friday to Sunday?\"", (700, 1850))
+                    "Try: \"Do you have a room this Friday to Sunday?\"\n\n"
+                    "The buttons below are always here: My booking (your reference), Check availability, Check in and Check out.", (700, 1850), menu=True)
     w.link(sw, hello, 6)
     return w
 
@@ -659,6 +625,7 @@ return [{ json: { guest_id: id } }];
 # ============================================================ 4. Vapi tools (phone calls)
 def vapi_tools():
     w = WF("Hotel Guest Journey - Vapi Tools")
+    w.fast = True
     hook = w.add("Webhook", "n8n-nodes-base.webhook",
                  {"httpMethod": "POST", "path": "hotel-guest-journey-vapi", "authentication": "headerAuth",
                   "responseMode": "responseNode", "options": {}}, (0, 300), ver=2.1, creds=C["vh"],

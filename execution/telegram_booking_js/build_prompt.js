@@ -1,15 +1,17 @@
 // "Build prompt" (Telegram Bot, guest message path). Knowledge Q&A plus room availability / booking.
 // Placeholders __HOTEL__ and __MODEL__ are filled in by build_n8n_workflows.py.
-const guest = $('Find guest').first().json;            // {} when this chat is not linked to a guest yet
+// Everything comes from ONE database call (the bot_context function): guest, booking draft, knowledge, settings, rooms, history.
+const data = $('Load context').first().json || {};
+const guest = data.guest || {};                         // {} when this chat is not linked to a guest yet
 const chat = $('Classify').first().json;
-const settings = Object.fromEntries($('Get settings').all().map(i => [i.json.key, (i.json.value || '').trim()]));
-const rooms = $('Get rooms').all().map(i => i.json).filter(r => r.name).map(r => ({ name: r.name, rate: r.nightly_rate }));
+const settings = Object.fromEntries(Object.entries(data.settings || {}).map(([k, v]) => [k, String(v || '').trim()]));
+const rooms = (data.rooms || []).filter(r => r.name).map(r => ({ name: r.name, rate: r.nightly_rate }));
 const lagos = new Date(Date.now() + 3600 * 1000);       // Africa/Lagos (UTC+1)
 const today = lagos.toISOString().slice(0, 10);
 const weekday = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][lagos.getUTCDay()];
 
 // What this person has already told us about a booking (ignored after 6 hours)
-const dr = $('Load draft').first().json || {};
+const dr = data.draft || {};
 const fresh = !!dr.chat_id && Date.now() - Date.parse(dr.updated_at) < 6 * 3600 * 1000;
 const draft = fresh ? { check_in: dr.check_in || null, check_out: dr.check_out || null, room_type: dr.room_type || null,
   guest_name: dr.guest_name || null, phone: dr.phone || null, phone_verified: !!dr.phone_verified, lang: dr.lang || 'en' } : {};
@@ -18,8 +20,8 @@ const draftLine = fresh && (draft.check_in || draft.check_out || draft.room_type
   : 'BOOKING IN PROGRESS: none';
 
 const entries = [];
-for (const i of $('Get knowledge').all()) {
-  const e = i.json; if (!e.id) continue;
+for (const e of (data.knowledge || [])) {
+  if (!e.id) continue;
   const keys = [...e.answer.matchAll(/\[\[(\w+)\]\]/g)].map(m => m[1]);
   if (keys.some(k => !settings[k])) continue;           // unfilled placeholder: not answerable
   const ans = e.answer.replace(/\[\[(\w+)\]\]/g, (_, k) => settings[k]);
@@ -31,7 +33,7 @@ const ctx = guest.id
       `${b.room_number ? ' (room ' + b.room_number + ')' : ''}, ${b.check_in} to ${b.check_out}, status ${b.status}.`
     : `Guest: ${guest.name}. No active booking found.`)
   : `Not linked to a booking yet${chat.from_name ? ' (Telegram name: ' + chat.from_name + ')' : ''}. They may be a new guest who wants to ask a question or book a room.`;
-const history = $('Get recent messages').all().map(i => i.json).filter(m => m.text).reverse()
+const history = (data.history || []).filter(m => m.text).reverse()
   .map(m => (m.direction === 'in' ? 'Guest: ' : 'Receptionist: ') + m.text).join('\n');
 const userText = chat.text || 'I have just shared my phone number.';
 const pidgin = /\b(abeg|wetin|wahala|dey|una|oga|sabi|chop|comot|pikin|wey|sef|abi|na|how far|which time|i wan|make i|no be|e don|dem go)\b/i.test(userText);
