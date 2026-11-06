@@ -1,0 +1,228 @@
+// Offline test of the Telegram booking node scripts (no n8n, no network, no AI).
+// The model's JSON is faked; what is tested is everything the code decides. Run: node execution/telegram_booking_js/test.js
+const fs = require('fs'), path = require('path');
+const assert = require('assert');
+const load = f => fs.readFileSync(path.join(__dirname, f), 'utf8').replace('// __LANG__', fs.readFileSync(path.join(__dirname, 'lang.js'), 'utf8'))
+  .replace(/__HOTEL__/g, 'BrightSide Hotel').replace(/__MODEL__/g, 'm');
+
+// Runs a Code-node script: `nodes` = outputs of other nodes by name, `input` = items arriving at this node.
+function run(file, nodes, input) {
+  const wrap = list => ({ first: () => ({ json: list[0] }), all: () => list.map(j => ({ json: j })) });
+  const $ = name => { if (!(name in nodes)) throw new Error('no node ' + name); return wrap(nodes[name]); };
+  const $input = wrap(input);
+  return new Function('$', '$input', load(file))($, $input).map(i => i.json);
+}
+
+const TODAY = new Date(Date.now() + 3600e3).toISOString().slice(0, 10);
+const plus = n => new Date(Date.parse(TODAY) + n * 86400000).toISOString().slice(0, 10);
+const ROOMS = [{ name: 'Standard', rate: 35000 }, { name: 'Deluxe', rate: 55000 }, { name: 'Suite', rate: 95000 }];
+const AVAIL = (over = {}) => [['Standard', 35000, 4], ['Deluxe', 55000, 2], ['Suite', 95000, 1]]
+  .map(([room_type, nightly_rate, n]) => ({ room_type, nightly_rate, available_rooms: over[room_type] ?? n }));
+
+// One full turn: model output -> Parse AI -> Plan booking -> (availability rows) -> Compose reply
+function turn({ say, llm, draft = {}, guest = {}, rows = AVAIL() }) {
+  const ctx = { chat_id: 1, text: say, from_name: 'Ada', guest_id: guest.id || '', guest_name: guest.name || '', guest_phone: guest.phone || '',
+    booking_id: null, room: '', today: TODAY, rooms: ROOMS, draft, hotel: 'BrightSide Hotel' };
+  const ai = { message: { content: [{ type: 'text', text: JSON.stringify({ can_answer: true, notify_staff: false, answer: '', ...llm }) }] } };
+  const parsed = run('parse_ai.js', { 'Build prompt': [ctx] }, [ai]);
+  const plan = run('plan_booking.js', { 'Parse AI': parsed }, parsed);
+  const out = run('compose_reply.js', { 'Plan booking': plan }, rows)[0];
+  return { out, plan: plan[0] };
+}
+const asDraft = o => ({ check_in: null, check_out: null, room_type: null, guest_name: null, phone: null, phone_verified: false, ...o.draft_row });
+let n = 0; const ok = (name, fn) => { fn(); n++; console.log('ok -', name); };
+
+const FRI = plus(7), SUN = plus(9);
+let t1, t2, t3, t4;
+
+ok('availability question lists live rooms and rates, saves the dates', () => {
+  t1 = turn({ say: 'what rooms do you have for friday to sunday?', llm: { intent: 'availability', check_in: FRI, check_out: SUN } });
+  assert(/Standard: 35,000 naira per night \(about 70,000 for 2 nights\)/.test(t1.out.reply), t1.out.reply);
+  assert(/Suite: 95,000/.test(t1.out.reply) && /Which room type/.test(t1.out.reply));
+  assert.strictEqual(t1.out.escalate, false); assert.strictEqual(t1.out.save_draft, true);
+  assert.strictEqual(t1.out.draft_row.check_in, FRI); assert.strictEqual(t1.out.draft_row.room_type, null);
+});
+ok('sold-out types are left out of the list', () => {
+  const t = turn({ say: 'rooms?', llm: { intent: 'availability', check_in: FRI, check_out: SUN }, rows: AVAIL({ Deluxe: 0 }) });
+  assert(!/Deluxe/.test(t.out.reply) && /Standard/.test(t.out.reply));
+});
+ok('picking a room with a draft in progress asks for the name (unknown guest)', () => {
+  t2 = turn({ say: 'deluxe please', llm: { intent: 'book', room_type: 'deluxe' }, draft: asDraft(t1.out) });
+  assert(/What name should the booking be under/.test(t2.out.reply), t2.out.reply);
+  assert.strictEqual(t2.out.draft_row.room_type, 'Deluxe'); assert.strictEqual(t2.out.draft_row.check_in, FRI);
+});
+ok('then the phone number, with the share-number button', () => {
+  t3 = turn({ say: 'Ada Obi', llm: { intent: 'book', guest_name: 'Ada Obi' }, draft: asDraft(t2.out) });
+  assert(/phone number/.test(t3.out.reply)); assert.strictEqual(t3.out.markup, 'phone');
+  assert.strictEqual(t3.out.draft_row.guest_name, 'Ada Obi');
+});
+ok('a typed local number is normalised and then the summary needs an explicit Confirm', () => {
+  t4 = turn({ say: '0803 123 4567', llm: { intent: 'book', phone: '0803 123 4567' }, draft: asDraft(t3.out) });
+  assert.strictEqual(t4.out.markup, 'confirm'); assert.strictEqual(t4.out.draft_row.phone, '+2348031234567');
+  assert.strictEqual(t4.out.draft_row.phone_verified, false);
+  assert(/Ada Obi, \+2348031234567/.test(t4.out.reply) && /about 110,000 naira in total/.test(t4.out.reply), t4.out.reply);
+  assert.strictEqual(t4.out.confirm_data, `${FRI}|${SUN}|Deluxe`);
+});
+ok('saying "yes book it" in words re-shows the summary instead of booking', () => {
+  const t = turn({ say: 'yes book it', llm: { intent: 'book' }, draft: asDraft(t4.out) });
+  assert.strictEqual(t.out.markup, 'confirm');
+});
+ok('a verified (shared) number is never overwritten by a typed one', () => {
+  const t = turn({ say: 'use 08011111111', llm: { intent: 'book', phone: '08011111111' }, draft: { ...asDraft(t4.out), phone: '+2348099999999', phone_verified: true } });
+  assert.strictEqual(t.out.draft_row.phone, '+2348099999999');
+});
+ok('a linked guest is not asked for name or phone', () => {
+  const t = turn({ say: 'book a suite', llm: { intent: 'book', room_type: 'Suite', check_in: FRI, check_out: SUN }, guest: { id: 'g1', name: 'Tunde', phone: '+2348020000000' } });
+  assert.strictEqual(t.out.markup, 'confirm'); assert(/Tunde, \+2348020000000/.test(t.out.reply));
+});
+ok('chosen room sold out: apologise, list alternatives, drop the choice', () => {
+  const t = turn({ say: 'book the suite', llm: { intent: 'book', room_type: 'Suite', check_in: FRI, check_out: SUN }, rows: AVAIL({ Suite: 0 }) });
+  assert(/no Suite rooms free/.test(t.out.reply) && /Standard/.test(t.out.reply)); assert.strictEqual(t.out.draft_row.room_type, null);
+});
+ok('nothing available at all', () => {
+  const t = turn({ say: 'rooms?', llm: { intent: 'availability', check_in: FRI, check_out: SUN }, rows: AVAIL({ Standard: 0, Deluxe: 0, Suite: 0 }) });
+  assert(/no rooms available/.test(t.out.reply));
+});
+ok('a single-room availability question gets a direct answer and an offer to book', () => {
+  const t = turn({ say: 'is a deluxe free friday to sunday?', llm: { intent: 'availability', room_type: 'Deluxe', check_in: FRI, check_out: SUN } });
+  assert(/Good news, a Deluxe room is available/.test(t.out.reply) && /Would you like me to book it/.test(t.out.reply));
+});
+ok('missing dates are asked for, one thing at a time', () => {
+  assert(/What date would you like to check in/.test(turn({ say: 'i want to book', llm: { intent: 'book' } }).out.reply));
+  assert(/How many nights/.test(turn({ say: 'from friday', llm: { intent: 'availability', check_in: FRI } }).out.reply));
+});
+ok('a past check-in date is refused', () => {
+  const t = turn({ say: 'book yesterday', llm: { intent: 'book', check_in: plus(-1), check_out: plus(1) } });
+  assert(/already passed/.test(t.out.reply)); assert.strictEqual(t.out.draft_row.check_in, null);
+});
+ok('check-out before check-in is refused', () => {
+  const t = turn({ say: 'x', llm: { intent: 'book', check_in: SUN, check_out: FRI } });
+  assert(/after check-in/.test(t.out.reply)); assert.strictEqual(t.out.draft_row.check_out, null);
+});
+ok('a new check-in after the old check-out resets the check-out', () => {
+  const t = turn({ say: 'actually arriving the 20th', llm: { intent: 'book', check_in: plus(20) }, draft: { check_in: FRI, check_out: SUN, room_type: null } });
+  assert(/How many nights/.test(t.out.reply)); assert.strictEqual(t.out.draft_row.check_out, null);
+});
+ok('stays over 30 nights go to staff', () => {
+  const t = turn({ say: 'x', llm: { intent: 'book', check_in: plus(5), check_out: plus(50) } });
+  assert.strictEqual(t.out.escalate, true); assert(/30 nights/.test(t.out.reply));
+});
+ok('a room type we do not have is called out', () => {
+  const t = turn({ say: 'penthouse?', llm: { intent: 'availability', room_type: 'Penthouse', check_in: FRI, check_out: SUN } });
+  assert(/don't have a room type called "Penthouse"/.test(t.out.reply));
+});
+ok('availability lookup failure escalates to staff', () => {
+  const t = turn({ say: 'rooms?', llm: { intent: 'availability', check_in: FRI, check_out: SUN }, rows: [{}] });
+  assert.strictEqual(t.out.escalate, true);
+});
+ok('"never mind" clears the draft', () => {
+  const t = turn({ say: 'never mind', llm: { intent: 'cancel_draft' }, draft: asDraft(t4.out) });
+  assert(/cleared/.test(t.out.reply)); assert.strictEqual(t.out.draft_row.check_in, null); assert.strictEqual(t.out.draft_row.guest_name, null);
+});
+ok('sharing the phone number (no text) mid-booking continues to the summary, whatever the model says', () => {
+  const draft = { check_in: FRI, check_out: SUN, room_type: 'Deluxe', guest_name: 'Ada Obi', phone: '+2348031234567', phone_verified: true };
+  const t = turn({ say: '', llm: { intent: 'other', answer: 'How can I help you with your booking?' }, draft });
+  assert.strictEqual(t.out.markup, 'confirm'); assert(!/How can I help/.test(t.out.reply), t.out.reply);
+  assert.strictEqual(t.out.draft_row.phone_verified, true);
+});
+ok('sharing the phone number with no booking in progress does not invent one', () => {
+  const t = turn({ say: '', llm: { intent: 'other', answer: 'Thanks!' } });
+  assert.strictEqual(t.out.save_draft, false); assert.strictEqual(t.out.markup, 'none');
+});
+ok('"cancel my booking" with nothing in progress goes to staff, not "cleared your request"', () => {
+  const t = turn({ say: 'please cancel my booking', llm: { intent: 'cancel_draft', can_answer: false } });
+  assert.strictEqual(t.out.escalate, true); assert(!/cleared/.test(t.out.reply), t.out.reply); assert.strictEqual(t.out.save_draft, false);
+});
+ok('a side question in a booking message is answered too, but the model cannot smuggle in availability claims', () => {
+  const a = turn({ say: 'is breakfast included? and rooms for fri-sun?', llm: { intent: 'availability', check_in: FRI, check_out: SUN, answer: 'Yes, breakfast is served 7am to 10am.' } });
+  assert(a.out.reply.startsWith('Yes, breakfast is served 7am to 10am.') && /we have:/.test(a.out.reply), a.out.reply);
+  const b = turn({ say: 'rooms fri-sun?', llm: { intent: 'availability', check_in: FRI, check_out: SUN, answer: 'Yes, plenty of Suite rooms are available for 20,000 naira.' } });
+  assert(!/plenty/.test(b.out.reply) && /Suite: 95,000/.test(b.out.reply), b.out.reply);
+});
+ok('ordinary questions pass through untouched and do not create a draft', () => {
+  const t = turn({ say: 'what time is breakfast?', llm: { intent: 'info', answer: 'Breakfast is 7 to 10.' } });
+  assert.strictEqual(t.out.reply, 'Breakfast is 7 to 10.'); assert.strictEqual(t.out.save_draft, false); assert.strictEqual(t.out.escalate, false);
+});
+ok('unanswerable questions still escalate with the holding message, even with a draft in progress', () => {
+  const t = turn({ say: 'do you allow pets?', llm: { intent: 'info', can_answer: false }, draft: asDraft(t1.out) });
+  assert.strictEqual(t.out.escalate, true); assert(/checking with our team/.test(t.out.reply)); assert.strictEqual(t.out.draft_row.check_in, FRI);
+});
+ok('a bad model reply (not JSON) falls back to staff', () => {
+  const ctx = { chat_id: 1, text: 'hi', today: TODAY, rooms: ROOMS, draft: {} };
+  const p = run('parse_ai.js', { 'Build prompt': [ctx] }, [{ message: { content: [{ type: 'text', text: 'oops' }] } }])[0];
+  assert.strictEqual(p.escalate, true); assert.strictEqual(p.intent, 'other');
+});
+ok('a message that would put markup characters in the draft does not break anything', () => {
+  const t = turn({ say: 'x', llm: { intent: 'book', guest_name: '<b>Ada</b>', check_in: FRI, check_out: SUN, room_type: 'Deluxe' } });
+  assert.strictEqual(t.out.draft_row.guest_name, '<b>Ada</b>');   // escaped later by the Telegram node's HTML escaping
+});
+
+// ---- confirm button
+const CB = (payload, action = 'bkok') => ({ Classify: [{ chat_id: 1, action, payload }] });
+const D = d => ({ chat_id: 1, updated_at: new Date().toISOString(), ...d });
+const good = D({ check_in: FRI, check_out: SUN, room_type: 'Deluxe', guest_name: 'Ada Obi', phone: '+2348031234567', phone_verified: false });
+ok('Confirm on the current summary books with the draft\'s details', () => {
+  const r = run('check_confirm.js', CB(`${FRI}|${SUN}|Deluxe`), [good])[0];
+  assert.strictEqual(r.mode, 'book'); assert.deepStrictEqual(r.body, { p_chat_id: 1, p_name: 'Ada Obi', p_phone: '+2348031234567', p_verified: false, p_room_type: 'Deluxe', p_check_in: FRI, p_check_out: SUN });
+});
+ok('Confirm on an out-of-date summary does not book', () => {
+  assert.strictEqual(run('check_confirm.js', CB(`${FRI}|${plus(10)}|Deluxe`), [good])[0].mode, 'msg');
+});
+ok('Confirm with no / expired draft does not book', () => {
+  assert.strictEqual(run('check_confirm.js', CB(`${FRI}|${SUN}|Deluxe`), [{}])[0].mode, 'msg');
+  assert.strictEqual(run('check_confirm.js', CB(`${FRI}|${SUN}|Deluxe`), [{ ...good, updated_at: new Date(Date.now() - 7 * 3600e3).toISOString() }])[0].mode, 'msg');
+});
+ok('Cancel button cancels', () => assert.strictEqual(run('check_confirm.js', CB('x', 'bkno'), [good])[0].mode, 'cancel'));
+
+// ---- booking result
+const R = (r, lang = 'en') => run('booking_result.js', { Classify: [{ chat_id: 1 }], 'Check confirm': [{ lang }] }, [r])[0];
+ok('successful booking: confirmation to guest and alert to staff', () => {
+  const x = R({ ok: true, booking_id: 'abc', ref: 'ABCD1234', room_type: 'Deluxe', rate: 55000, nights: 2, guest_name: 'Ada Obi', guest_phone: '+2348031234567', check_in: '2026-12-11', check_out: '2026-12-13' });
+  assert(/You're booked/.test(x.text) && /ABCD1234/.test(x.text) && /110,000/.test(x.text) && /Fri 11 Dec 2026/.test(x.text), x.text);
+  assert(/New Telegram booking/.test(x.staff) && /Ada Obi/.test(x.staff));
+});
+ok('failure reasons are explained and do not alert staff; unknown failures do', () => {
+  assert(/just taken/.test(R({ ok: false, reason: 'sold_out', room_type: 'Suite' }).text));
+  assert.strictEqual(R({ ok: false, reason: 'limit' }).staff, '');
+  const x = R({}); assert(/FAILED/.test(x.staff) && /could not save/.test(x.text));
+  assert(/FAILED/.test(R({ error: 'x' }).staff));
+});
+
+// ---- Pidgin
+ok('Pidgin message gets Pidgin booking replies, with the same facts', () => {
+  const t = turn({ say: 'abeg una get room for friday to sunday?', llm: { intent: 'availability', check_in: FRI, check_out: SUN } });
+  assert.strictEqual(t.out.draft_row.lang, 'pcm');
+  assert(/we get:/.test(t.out.reply) && /Which room type you want/.test(t.out.reply), t.out.reply);
+  assert(/Deluxe: 55,000 naira per night \(about 110,000 for 2 nights\)/.test(t.out.reply), 'numbers must be identical to English');
+});
+ok('English message stays English', () => {
+  assert.strictEqual(turn({ say: 'rooms for friday to sunday please', llm: { intent: 'availability', check_in: FRI, check_out: SUN } }).out.draft_row.lang, 'en');
+});
+ok('a short follow-up ("Deluxe") keeps the language of the draft; a long English message switches back', () => {
+  const draft = { check_in: FRI, check_out: SUN, room_type: null, lang: 'pcm' };
+  const a = turn({ say: 'Deluxe', llm: { intent: 'book', room_type: 'Deluxe' }, draft });
+  assert.strictEqual(a.out.draft_row.lang, 'pcm'); assert(/Which name make I put/.test(a.out.reply), a.out.reply);
+  const b = turn({ say: 'Actually I would like the deluxe room please', llm: { intent: 'book', room_type: 'Deluxe' }, draft });
+  assert.strictEqual(b.out.draft_row.lang, 'en');
+});
+ok('Pidgin summary has the same data and the Confirm prompt', () => {
+  const draft = { check_in: FRI, check_out: SUN, room_type: 'Deluxe', guest_name: 'Ada Obi', phone: '+2348031234567', phone_verified: true, lang: 'pcm' };
+  const t = turn({ say: '', llm: { intent: 'other' }, draft });
+  assert.strictEqual(t.out.markup, 'confirm');
+  assert(/Abeg check your booking well/.test(t.out.reply) && /Ada Obi, \+2348031234567/.test(t.out.reply) && /110,000/.test(t.out.reply));
+  assert.strictEqual(t.out.confirm_data, `${FRI}|${SUN}|Deluxe`);
+});
+ok('Pidgin problems, confirm messages and booking result', () => {
+  assert(/don pass/.test(turn({ say: 'abeg book am', llm: { intent: 'book', check_in: plus(-1), check_out: plus(1) } }).out.reply));
+  assert(/No wahala/.test(run('check_confirm.js', CB('x', 'bkno'), [{ ...good, lang: 'pcm' }])[0].text));
+  assert(/don expire/.test(run('check_confirm.js', CB('x'), [{ lang: 'pcm' }])[0].text));
+  const x = R({ ok: true, booking_id: 'abc', ref: 'ABCD1234', room_type: 'Deluxe', rate: 55000, nights: 2, guest_name: 'Ada', guest_phone: '+234', check_in: '2026-12-11', check_out: '2026-12-13' }, 'pcm');
+  assert(/Your booking don enter/.test(x.text) && /ABCD1234/.test(x.text) && /110,000/.test(x.text) && /New Telegram booking/.test(x.staff), x.text);
+  assert(/don go/.test(R({ ok: false, reason: 'sold_out', room_type: 'Suite' }, 'pcm').text));
+});
+ok('every English message has a Pidgin version', () => {
+  const [en, pcm] = new Function(fs.readFileSync(path.join(__dirname, 'lang.js'), 'utf8') + '; return [Object.keys(LANG.en), Object.keys(LANG.pcm)];')();
+  assert.deepStrictEqual(en.sort(), pcm.sort());
+});
+
+console.log(`\n${n} tests passed`);
