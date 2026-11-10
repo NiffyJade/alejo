@@ -30,7 +30,8 @@ const dd = ctx.draft || {};
 const inProgress = !!(dd.check_in || dd.check_out || dd.room_type || dd.guest_name || dd.phone);
 let escalate = !ok || p.notify_staff === true;
 if (!escalate) { kind = 'question'; category = null; }
-const useAnswer = ok && (kind !== 'emergency' || /112/.test(p.answer));   // an emergency reply must tell the guest to call 112
+// Requests and complaints get the fixed 'logged, the team will follow up' message, never the model's wording, so nothing is promised that staff have not agreed to.
+const useAnswer = ok && (kind === 'question' || (kind === 'emergency' && /112/.test(p.answer)));
 // Dropping an unfinished booking request is for the bot; "cancel my booking" about an existing booking is for staff.
 if (intent === 'cancel_draft' && !inProgress) { intent = 'other'; escalate = true; }
 // No text means the guest tapped "Share my phone number": carry on with the booking they were in the middle of.

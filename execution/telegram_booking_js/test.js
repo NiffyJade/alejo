@@ -256,4 +256,8 @@ ok('an invented kind or category is ignored', () => {
   const t = turn({ say: 'my room is dirty', llm: { can_answer: false, notify_staff: true, kind: 'banana', category: 'zzz' } });
   assert.strictEqual(t.out.kind, 'question'); assert.strictEqual(t.out.category, null);
 });
+ok('a model reply that promises "right away" is replaced by the fixed message for a request', () => {
+  const t = turn({ say: 'send towels to 206', llm: { intent: 'other', can_answer: true, notify_staff: true, kind: 'request', category: 'housekeeping', answer: 'Towels are on the way right away!' } });
+  assert(!/right away|on the way/.test(t.out.reply), t.out.reply); assert(/housekeeping team/.test(t.out.reply), t.out.reply); assert.strictEqual(t.out.kind, 'request');
+});
 console.log(n + ' tests passed (service recovery included)');
