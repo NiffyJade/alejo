@@ -226,3 +226,34 @@ ok('every English message has a Pidgin version', () => {
 });
 
 console.log(`\n${n} tests passed`);
+
+// ---- service recovery: kind and category travel with an escalation
+ok('a broken AC is tracked as a maintenance complaint and the guest is told it is logged', () => {
+  const t = turn({ say: "the AC in my room isn't working", llm: { intent: 'other', can_answer: false, notify_staff: true, kind: 'complaint', category: 'maintenance' } });
+  assert.strictEqual(t.out.kind, 'complaint'); assert.strictEqual(t.out.category, 'maintenance'); assert(t.out.escalate);
+  assert(/maintenance team/.test(t.out.reply) && /sorry/i.test(t.out.reply), t.out.reply);
+  assert.strictEqual(t.out.alert_title, '⚠️ Guest complaint (maintenance)');
+});
+ok('a request in Pidgin gets a Pidgin acknowledgement', () => {
+  const t = turn({ say: 'abeg I wan get extra towel for room', llm: { intent: 'other', can_answer: false, notify_staff: true, kind: 'request', category: 'housekeeping' } });
+  assert.strictEqual(t.out.kind, 'request'); assert(/housekeeping/.test(t.out.reply) && /dem go/i.test(t.out.reply), t.out.reply);
+  assert.strictEqual(t.out.alert_title, '🛎 Guest request (housekeeping)');
+});
+ok('danger words are an emergency even if the model missed it, and the reply says call 112', () => {
+  const t = turn({ say: 'there is a fire on my floor', llm: { intent: 'info', can_answer: true, notify_staff: false, answer: 'Please remain calm.' } });
+  assert.strictEqual(t.out.kind, 'emergency'); assert(t.out.escalate); assert(/112/.test(t.out.reply), t.out.reply);
+  assert.strictEqual(t.out.alert_title, '🚨 EMERGENCY');
+});
+ok('"fire exit" and "smoking" are not emergencies', () => {
+  const t = turn({ say: 'where is the fire exit, and can I smoke on the balcony?', llm: { intent: 'info', can_answer: true, notify_staff: false, answer: 'The fire exit is by the lift.' } });
+  assert.strictEqual(t.out.kind, 'question'); assert(!t.out.escalate);
+});
+ok('a plain unanswered question stays a question', () => {
+  const t = turn({ say: 'do you have a helipad?', llm: { intent: 'other', can_answer: false, notify_staff: true } });
+  assert.strictEqual(t.out.kind, 'question'); assert.strictEqual(t.out.category, null); assert.strictEqual(t.out.alert_title, '🛎 Guest needs help');
+});
+ok('an invented kind or category is ignored', () => {
+  const t = turn({ say: 'my room is dirty', llm: { can_answer: false, notify_staff: true, kind: 'banana', category: 'zzz' } });
+  assert.strictEqual(t.out.kind, 'question'); assert.strictEqual(t.out.category, null);
+});
+console.log(n + ' tests passed (service recovery included)');

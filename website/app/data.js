@@ -16,20 +16,20 @@
 
   // stage: 0 booked, 1 reminder sent, 2 checked in, 3 checkout reminder sent, 4 checked out, 5 thanked
   const bookings = [
-    { id: 'b1',  ref: 'AL-1031', guest: 'Folake Johnson',  room: '208', type: 'Deluxe',   in: '2026-10-26', out: '2026-10-28', src: 'Telegram', stage: 2, note: 'Checked in 26 Oct, 15:20' },
-    { id: 'b2',  ref: 'AL-1038', guest: 'Chinedu Okafor',  room: '301', type: 'Suite',    in: '2026-10-27', out: '2026-10-29', src: 'Telegram', stage: 1, note: 'Reminder sent 26 Oct, 10:00' },
-    { id: 'b3',  ref: 'AL-1027', guest: 'Amina Bello',     room: '112', type: 'Standard', in: '2026-10-26', out: '2026-10-27', src: 'Telegram', stage: 3, note: 'Checkout reminder at 08:00' },
+    { id: 'b1',  ref: 'AL-1031', code: '482913', guest: 'Folake Johnson',  room: '208', type: 'Deluxe',   in: '2026-10-26', out: '2026-10-28', src: 'Telegram', stage: 2, note: 'Checked in 26 Oct, 15:20' },
+    { id: 'b2',  ref: 'AL-1038', code: '913562', guest: 'Chinedu Okafor',  room: '301', type: 'Suite',    in: '2026-10-27', out: '2026-10-29', src: 'Telegram', stage: 1, note: 'Reminder sent 26 Oct, 10:00' },
+    { id: 'b3',  ref: 'AL-1027', code: '621047', guest: 'Amina Bello',     room: '112', type: 'Standard', in: '2026-10-26', out: '2026-10-27', src: 'Telegram', stage: 3, note: 'Checkout reminder at 08:00' },
     { id: 'b4',  ref: 'AL-1042', guest: 'Tolu Adeyemi',    room: '204', type: 'Deluxe',   in: '2026-10-28', out: '2026-10-30', src: 'Phone',    stage: 0, note: 'Booked by phone 26 Oct, 21:48', linked: false },
     { id: 'b5',  ref: 'AL-1043', guest: 'Emeka Nwosu',     room: '115', type: 'Standard', in: '2026-10-29', out: '2026-10-31', src: 'Phone',    stage: 0, note: 'Booked by phone 26 Oct, 22:10', linked: false },
     { id: 'b6',  ref: 'AL-1019', guest: 'Hauwa Ibrahim',   room: '305', type: 'Suite',    in: '2026-10-25', out: '2026-10-27', src: 'Telegram', stage: 3, note: 'Checkout reminder at 08:00' },
     { id: 'b7',  ref: 'AL-1044', guest: 'Segun Balogun',   room: '210', type: 'Deluxe',   in: '2026-10-30', out: '2026-11-01', src: 'Phone',    stage: 0, note: 'Booked by phone 26 Oct, 18:30', linked: false },
     { id: 'b8',  ref: 'AL-1040', guest: 'Ngozi Eze',       room: '109', type: 'Standard', in: '2026-10-27', out: '2026-10-29', src: 'Telegram', stage: 1, note: 'Reminder sent 26 Oct, 10:00' },
-    { id: 'b9',  ref: 'AL-1025', guest: 'Ibrahim Danjuma', room: '302', type: 'Suite',    in: '2026-10-26', out: '2026-10-29', src: 'Telegram', stage: 2, note: 'Checked in 26 Oct, 13:05' },
+    { id: 'b9',  ref: 'AL-1025', code: '305118', guest: 'Ibrahim Danjuma', room: '302', type: 'Suite',    in: '2026-10-26', out: '2026-10-29', src: 'Telegram', stage: 2, note: 'Checked in 26 Oct, 13:05' },
     { id: 'b10', ref: 'AL-1041', guest: 'Blessing Okoro',  room: '118', type: 'Standard', in: '2026-10-27', out: '2026-10-28', src: 'Phone',    stage: 0, note: 'Booked by phone today, 00:55', linked: false },
     { id: 'b11', ref: 'AL-1018', guest: 'Kunle Adebayo',   room: '211', type: 'Deluxe',   in: '2026-10-25', out: '2026-10-27', src: 'Telegram', stage: 3, note: 'Checkout reminder at 08:00' },
     { id: 'b12', ref: 'AL-1045', guest: 'Adaeze Obi',      room: '101', type: 'Standard', in: '2026-10-31', out: '2026-11-02', src: 'Phone',    stage: 0, note: 'Booked by phone 25 Oct, 16:40', linked: false },
-    { id: 'b13', ref: 'AL-1009', guest: 'Musa Garba',      room: '206', type: 'Deluxe',   in: '2026-10-24', out: '2026-10-26', src: 'Telegram', stage: 5, note: 'Thank-you sent 26 Oct, 12:20' },
-    { id: 'b14', ref: 'AL-1029', guest: 'Funmi Ajayi',     room: '110', type: 'Standard', in: '2026-10-26', out: '2026-10-27', src: 'Telegram', stage: 2, note: 'Late checkout agreed, until 2 PM' },
+    { id: 'b13', ref: 'AL-1009', code: '208836', guest: 'Musa Garba',      room: '206', type: 'Deluxe',   in: '2026-10-24', out: '2026-10-26', src: 'Telegram', stage: 5, note: 'Thank-you sent 26 Oct, 12:20' },
+    { id: 'b14', ref: 'AL-1029', code: '770254', guest: 'Funmi Ajayi',     room: '110', type: 'Standard', in: '2026-10-26', out: '2026-10-27', src: 'Telegram', stage: 2, note: 'Late checkout agreed, until 2 PM' },
   ];
   const HUES = [212, 18, 152, 332, 58, 268, 100, 0, 190, 298, 38, 240, 128, 352];
   bookings.forEach((b, i) => { b.hue = HUES[i % HUES.length]; b.nights = nights(b); b.total = total(b); });
@@ -37,7 +37,7 @@
 
   // conversations: role is guest | ai | staff | note
   const conversations = [
-    { id: 'c1', guest: 'Folake Johnson', ch: 'Telegram', ago: '17 min', unread: true, status: 'needs', topic: 'Asked about a helipad', lang: 'English',
+    { id: 'c1', guest: 'Folake Johnson', ch: 'Telegram', ago: '17 min', unread: true, status: 'needs', kind: 'question', topic: 'Asked about a helipad', lang: 'English',
       suggest: 'No helipad, Ma. Free parking though.',
       why: 'Not in your facts, so the AI held it instead of guessing.',
       msgs: [
@@ -46,7 +46,7 @@
         { r: 'ai', t: '02:14', x: "Thanks for your message. I'm checking with our team and will get back to you here shortly." },
         { r: 'note', t: '02:14', x: 'Sent to BrightSide Staff. Waiting for a reply.' },
       ] },
-    { id: 'c2', guest: 'Chinedu Okafor', ch: 'Telegram', ago: '33 min', unread: true, status: 'needs', topic: 'Wants to extend to Friday', lang: 'English',
+    { id: 'c2', guest: 'Chinedu Okafor', ch: 'Telegram', ago: '33 min', unread: true, status: 'needs', kind: 'request', category: 'booking', topic: 'Wants to extend to Friday', lang: 'English',
       suggest: 'Good evening, Mr Okafor. Yes, Suite 301 is free until Friday. I have extended your booking.',
       why: 'A booking change needs a person.',
       msgs: [
@@ -90,7 +90,7 @@
         { r: 'ai', t: '22:10', x: 'Yes, we can arrange airport pickup. Send us your flight number, arrival time and number of passengers. The front desk will confirm the exact price when you book.' },
         { r: 'note', t: '22:10', x: 'Waiting on the guest for a flight number.' },
       ] },
-    { id: 'c9', guest: 'Funmi Ajayi', ch: 'Telegram', ago: '5 h', unread: false, status: 'done', topic: 'Late checkout, agreed', lang: 'English',
+    { id: 'c9', guest: 'Funmi Ajayi', ch: 'Telegram', ago: '5 h', unread: false, status: 'done', kind: 'request', category: 'other', resolvedIn: 25, topic: 'Late checkout, agreed', lang: 'English',
       msgs: [
         { r: 'guest', t: '21:05', x: 'Late checkout please, my flight is in the evening.' },
         { r: 'ai', t: '21:05', x: "Thanks. Late checkout depends on whether the room is needed. I've asked our team." },
@@ -112,6 +112,21 @@
         { r: 'note', t: '26 Oct, 18:30', x: 'Phone call, 3 min 50 s, from +234 809 000 0000 (sample).' },
         { r: 'ai', t: '18:34', x: 'Booked. Deluxe room, 30 October to 1 November, 2 nights, estimated total ₦110,000. Reference AL-1044.' },
       ] },
+    { id: 'c13', guest: 'Ibrahim Danjuma', ch: 'Telegram', ago: '48 min', unread: true, status: 'needs', kind: 'complaint', category: 'maintenance', topic: 'AC in Suite 302 is not cooling', lang: 'English',
+      suggest: "Sorry about that, Sir. Maintenance is on the way to Suite 302 now.",
+      why: 'A repair needs a person. Alejo has re-alerted your staff group once.',
+      msgs: [
+        { r: 'guest', t: '01:43', x: "The AC in my room isn't working and it's very hot." },
+        { r: 'note', t: '01:43', x: 'Logged as a maintenance complaint. Alert sent to the staff group.' },
+        { r: 'ai', t: '01:43', x: "I'm sorry about that. I have logged this with our maintenance team and they will update you here." },
+        { r: 'note', t: '02:13', x: 'Still open after 30 min. Staff group reminded.' },
+      ] },
+    { id: 'c14', guest: 'Musa Garba', ch: 'Telegram', ago: '1 d', unread: false, status: 'done', kind: 'request', category: 'housekeeping', resolvedIn: 22, topic: 'Extra towels, delivered', lang: 'English',
+      msgs: [
+        { r: 'guest', t: '25 Oct, 19:02', x: 'Please can I get two extra towels in room 206?' },
+        { r: 'ai', t: '19:02', x: 'Of course. I have logged this with our housekeeping team and they will update you here.' },
+        { r: 'staff', t: '19:24', x: 'Towels delivered to 206, Sir.', by: 'Tunde B.' },
+      ] },
   ];
 
   const staff = [
@@ -128,6 +143,6 @@
   const inHouse = bookings.filter((b) => b.stage >= 2 && b.stage < 4);
   const leaving = bookings.filter((b) => b.out === NOW.date && b.stage < 4);
   console.assert(arriving.length === 3 && inHouse.length === 6 && leaving.length === 4, 'stay counts');
-  console.assert(conversations.filter((c) => c.status === 'needs').length === 3, 'three guests need a person');
+  console.assert(conversations.filter((c) => c.status === 'needs').length === 4, 'four guests need a person');
   console.assert(bookings.every((b) => b.total === b.nights * RATES[b.type]), 'totals come from nights x rate');
 })();

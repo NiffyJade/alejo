@@ -37,6 +37,11 @@
     <div><h1>Bookings</h1><p class="sub">Every stay, from booking to thank-you.</p></div>
     <div class="actions"><button class="btn line" type="button" id="bexport">Export CSV</button></div>
   </div>
+  <section class="verify" aria-labelledby="h-verify">
+    <div><h2 id="h-verify">Verify a guest</h2><p>Ask the guest for their private stay code, then type it here to see whose stay it belongs to. Use it before handing over a key, charging a room or sharing booking details.</p></div>
+    <form class="vform" id="vform" autocomplete="off"><label class="sr" for="vcode">Stay code</label><input class="field" id="vcode" inputmode="numeric" maxlength="9" placeholder="6-digit stay code" spellcheck="false" autocomplete="off"><button class="btn" type="submit">Verify</button></form>
+    <div class="vres" id="vresult" role="status" aria-live="polite"></div>
+  </section>
   <div class="sum" id="bsum" aria-label="Today"></div>
   <div class="tabs" role="tablist" id="btabs" aria-label="Views"></div>
   <div class="toolbar">
@@ -47,7 +52,7 @@
     <div class="th cols-b" role="row"><div>Guest</div><div>Room</div><div>Dates</div><div>Stay journey</div><div>Source</div><div class="num">Total</div></div>
     <div id="bbody"></div>
   </div>
-  <p class="foot-note">Totals are nights times the room rate. The journey shows booked, reminder, checked in, checkout reminder, thanked.</p>
+  <p class="foot-note">Totals are nights times the room rate. The journey shows booked, reminder, checked in, checkout reminder, checked out, thanked. Stay codes go only to guests on Telegram, from the day they check in; guests who booked by phone and are not on Telegram have no code, so check their ID and reference instead.</p>
 </main>
 </div>
 </div>

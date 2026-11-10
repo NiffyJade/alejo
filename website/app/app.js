@@ -28,6 +28,15 @@
   const toast = (msg) => { let t = $('#toast'); if (!t) { t = h('p', { id: 'toast', class: 'toast', role: 'alert' }); document.body.append(t); } t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 5000); };
   const statusOf = (c) => (S.resolved.includes(c.id) ? 'done' : c.status);
   const needs = () => FD.conversations.filter((c) => statusOf(c) === 'needs');
+  // service recovery: a request, complaint or emergency is tracked until someone settles it, and is late once it has been open past its target
+  const SERVICE = (c) => !!c.kind && c.kind !== 'question';
+  const TARGET = (c) => (c.kind === 'emergency' ? 10 : 30);               // minutes
+  const KIND_WORD = (c) => (c.kind === 'emergency' ? 'Emergency' : (c.category ? c.category[0].toUpperCase() + c.category.slice(1) + ' ' : '') + (c.category ? c.kind : c.kind[0].toUpperCase() + c.kind.slice(1)));
+  const KIND_CLS = (c) => (c.kind === 'emergency' ? 'neg' : c.kind === 'complaint' ? 'warn' : '');
+  const waitMins = (c) => { if (c.waitMins != null) return c.waitMins; const m = /^(\d+)\s*(min|h|d)/.exec(c.ago || ''); return m ? +m[1] * { min: 1, h: 60, d: 1440 }[m[2]] : 0; };
+  const late = (c) => SERVICE(c) && statusOf(c) === 'needs' && waitMins(c) > TARGET(c);
+  const urgency = (c) => (statusOf(c) !== 'needs' ? 3 : c.kind === 'emergency' ? 0 : SERVICE(c) ? 1 : 2);
+  const kindPill = (c) => (SERVICE(c) ? h('span', { class: 'pill kind ' + KIND_CLS(c), text: KIND_WORD(c) }) : null);
   const dataHandlers = [];
   const onData = (fn) => dataHandlers.push(fn);                      // live.js announces fresh rows with an "alejo:data" event
   addEventListener('alejo:data', () => dataHandlers.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } }));
@@ -59,34 +68,53 @@
     const KB = [...(window.FD_KB || []), ...S.added], facts = Object.assign({}, window.FD_FACTS, S.facts);
     const missing = (e) => (e.k || []).filter((k) => !facts[k]);
     const held = KB.filter((e) => missing(e).length), blank = [...new Set(held.flatMap(missing))];
-    const mins = (a) => { const m = /^(\d+)\s*(min|h|d)/.exec(a || ''); return m ? +m[1] * { min: 1, h: 60, d: 1440 }[m[2]] : 0; };
-    const waiting = needs().sort((a, b) => mins(b.ago) - mins(a.ago));
+    const rank = (c) => (c.kind === 'emergency' ? 0 : SERVICE(c) ? 1 : 2);
+    const waiting = needs().sort((a, b) => rank(a) - rank(b) || waitMins(b) - waitMins(a));
     const arriving = B.filter((b) => b.in === today && b.stage < 4);
     const inHouse = B.filter((b) => b.stage >= 2 && b.stage < 4);
     const leaving = B.filter((b) => b.out === today && b.stage < 4);
     const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-    const longest = waiting.length ? waiting[0].ago : '';
+    const longest = waiting.length ? [...waiting].sort((a, b) => waitMins(b) - waitMins(a))[0].ago : '';
 
     // the finding, then the one job
-    const bits = [waiting.length ? `${plural(waiting.length, 'guest needs', 'guests need')} a person, the longest for ${longest}.` : 'Nobody is waiting on you. The AI has it.'];
+    const bits = [waiting.length ? `${plural(waiting.length, 'guest needs', 'guests need')} a person, the longest for ${longest}.${waiting.some(late) ? ' ' + plural(waiting.filter(late).length, 'item is', 'items are') + ' past the target.' : ''}` : 'Nobody is waiting on you. The AI has it.'];
     if (held.length) bits.push(`${plural(held.length, 'answer is', 'answers are')} held back until ${plural(blank.length, 'fact is', 'facts are')} filled in.`);
     $('#ovSub').textContent = FD.NOW.label + '. ' + bits.join(' ');
     const cta = $('#ovCta');
     if (waiting.length) { cta.textContent = 'Reply to ' + waiting[0].guest.split(' ')[0]; cta.href = '/app/inbox.html?c=' + encodeURIComponent(waiting[0].id); } else { cta.textContent = 'Open inbox'; }
 
     const kpi = (cls, label, value, note) => h('div', { class: 'kpi' + cls }, h('span', { text: label }), h('b', { text: String(value) }), h('small', { text: note }));
-    const byTg = inHouse.filter((b) => b.src === 'Telegram').length;
+    // how well guests are being looked after: every guest question, and who settled it
+    const week = FD.conversations.filter((c) => !c.last || Date.now() - new Date(c.last).getTime() < 7 * 864e5);
+    const asked = week.filter((c) => c.msgs.some((m) => m.r === 'guest')), settled = asked.filter((c) => statusOf(c) !== 'needs');
+    const withStaff = asked.filter((c) => statusOf(c) === 'done' && (c.resolvedIn || c.msgs.some((m) => m.r === 'staff'))).length, alone = settled.length - withStaff;
+    const times = week.map((c) => c.resolvedIn).filter((n) => n > 0).sort((a, b) => a - b), median = times.length ? times[Math.floor(times.length / 2)] : 0;
+    const dur = (m) => (m < 60 ? m + ' min' : Math.round(m / 6) / 10 + ' h');
+    const rate = asked.length ? Math.round((settled.length / asked.length) * 100) : 100;
+    // resolution score: of this week's requests, complaints and emergencies, how many were settled within their target (an open one counts once it is late)
+    const svc = week.filter(SERVICE), settledOn = svc.filter((c) => c.resolvedIn > 0 && c.resolvedIn <= TARGET(c)).length, settledLate = svc.filter((c) => c.resolvedIn > 0 && c.resolvedIn > TARGET(c)).length, openLate = svc.filter(late).length;
+    const scored = settledOn + settledLate + openLate, score = scored ? Math.round((settledOn / scored) * 100) : null;
     $('#ovKpis').replaceChildren(
       kpi(' lead', 'Need you', waiting.length, waiting.length ? 'longest wait ' + longest : 'nobody is waiting'),
-      kpi('', 'Arriving today', arriving.length, FD.naira(arriving.reduce((t, b) => t + b.total, 0)) + ' booked'),
-      kpi(' house', 'In house', inHouse.length, `${byTg} on Telegram, ${inHouse.length - byTg} by phone`),
-      kpi('', 'Leaving today', leaving.length, `${leaving.filter((b) => b.stage === 3).length} checkout reminders sent`));
+      kpi('', 'Questions settled', rate + '%', asked.length ? `${settled.length} of ${asked.length} this week${median ? ', staff fix in ' + dur(median) : ''}` : 'no questions yet'),
+      kpi(' house', 'Alejo handled alone', alone, withStaff ? `${withStaff} more settled with your staff` : 'no staff needed'),
+      kpi(score !== null && score < 80 ? ' warn' : '', 'Fixed on time', score === null ? 'n/a' : score + '%', scored ? `${settledOn} of ${scored} requests within target` : 'no requests yet'));
+
+    // what Alejo would do next, from the rows above (plain rules, no guessing)
+    const sug = [];
+    waiting.filter((c) => c.fact).forEach((c) => sug.push({ t: `Fill in ${c.fact === 'WIFI_PASSWORD' ? 'the Wi-Fi password' : 'a missing fact'}`, d: `${c.guest.split(' ')[0]} is waiting on it, and so will the next guest who asks.`, href: '/app/knowledge.html#' + c.fact, cta: 'Add fact' }));
+    if (held.length && !waiting.some((c) => c.fact)) sug.push({ t: `Switch on ${plural(held.length, 'held-back answer', 'held-back answers')}`, d: `Fill in ${plural(blank.length, 'fact', 'facts')} and guests get these answers without waiting for staff.`, href: '/app/knowledge.html?tab=held', cta: 'Open Facts' });
+    const soon = B.filter((b) => b.linked === false && b.stage < 2 && FD.day(b.in) - FD.day(today) <= 2 && FD.day(b.in) >= FD.day(today));
+    if (soon.length) sug.push({ t: `${plural(soon.length, 'guest arrives', 'guests arrive')} within 2 days without Telegram`, d: `${soon.slice(0, 3).map((b) => b.guest.split(' ')[0]).join(', ')}: their reminder and check-in button cannot reach them. Ask them to share their number with the bot.`, href: '/app/bookings.html?tab=arriving', cta: 'See stays' });
+    const slow = waiting.filter(late);
+    if (slow.length) sug.unshift({ t: `${plural(slow.length, 'request is', 'requests are')} past the ${slow.some((c) => c.kind === 'emergency') ? '10 minute emergency' : '30 minute'} target`, d: slow.slice(0, 2).map((c) => `${c.guest.split(' ')[0]}: ${KIND_WORD(c).toLowerCase()}, ${c.ago}`).join('. ') + '. Alejo keeps re-alerting your staff group while they stay open; a reply or Resolve closes them.', href: '/app/inbox.html?c=' + encodeURIComponent(slow[0].id), cta: 'Open' });
+    $('#ovSug').replaceChildren(...(sug.length ? sug.slice(0, 3).map((s) => h('div', { class: 'sug' }, h('div', {}, h('b', { text: s.t }), h('small', { text: s.d })), h('a', { class: 'btn line small', href: s.href }, s.cta))) : [h('p', { class: 'foot-note', text: 'Nothing to suggest. Questions are being settled and every guest can be reached.' })]));
 
     // who is waiting
     $('#ovNeeds').replaceChildren(...(waiting.length ? waiting.slice(0, 4).map((c) => h('div', { class: 'qrow' },
       disc(c.guest, FD.byGuest[c.guest].hue),
-      h('div', {}, h('b', { text: c.guest }), h('small', { text: c.topic }), c.why ? h('small', { class: 'why', text: c.why }) : null),
-      h('span', { class: 'wait', text: c.ago }),
+      h('div', {}, h('b', { text: c.guest }), h('small', {}, kindPill(c), c.topic), c.why ? h('small', { class: 'why', text: c.why }) : null),
+      h('span', { class: 'wait' + (late(c) ? ' late' : ''), text: c.ago + (late(c) ? ', late' : '') }),
       h('a', { class: 'btn line small', href: '/app/inbox.html?c=' + encodeURIComponent(c.id), 'aria-label': 'Reply to ' + c.guest }, 'Reply'))) : [h('p', { class: 'foot-note', text: 'Nobody is waiting on you.' })]));
 
     // arrivals and departures
@@ -132,7 +160,7 @@
   if (page === 'inbox') {
     const mail = $('#mail'), rowsEl = $('#crows'), pane = $('#pane'), det = $('#details'), tabsEl = $('#ctabs'), qEl = $('#cq');
     const gq = $('#q');
-    let tab = ['needs', 'all', 'phone'].includes(params.get('tab')) ? params.get('tab') : 'needs', q = (params.get('q') || '').toLowerCase(), sel = (FD.conversations.find((x) => x.id === params.get('c')) || needs()[0] || FD.conversations[0] || {}).id;
+    let tab = ['needs', 'all', 'phone'].includes(params.get('tab')) ? params.get('tab') : 'needs', q = (params.get('q') || '').toLowerCase(), sel = (FD.conversations.find((x) => x.id === params.get('c')) || [...needs()].sort((a, b) => urgency(a) - urgency(b) || (urgency(a) < 3 ? waitMins(b) - waitMins(a) : 0))[0] || FD.conversations[0] || {}).id;
     let lastSig = '', lastPing = 0;                                 // lastSig: did the open conversation change? lastPing: throttle for the typing signal
     const drafts = {};                                              // what the staff member has typed, per conversation, so a refresh never eats it
     const sig = (c) => (c ? c.msgs.length + '|' + statusOf(c) + '|' + (c.escId || '') + '|' + c.msgs.map((m) => m.x.length).join(',') : '');
@@ -145,10 +173,10 @@
       tabsEl.replaceChildren(...tabs.map(([id, label]) => h('button', { class: 'tab', role: 'tab', type: 'button', 'aria-selected': String(tab === id), onclick: () => { tab = id; remember('tab', id); paint(); } }, label, h('span', { class: 'n', text: String(count(id)) }))));
     };
     const paintList = () => {
-      const list = FD.conversations.filter((c) => inTab(c) && (!q || (c.guest + ' ' + c.topic).toLowerCase().includes(q)));
+      const list = FD.conversations.filter((c) => inTab(c) && (!q || (c.guest + ' ' + c.topic).toLowerCase().includes(q))).sort((a, b) => urgency(a) - urgency(b) || (urgency(a) < 3 ? waitMins(b) - waitMins(a) : 0));
       rowsEl.replaceChildren(...(list.length ? list.map((c) => {
         const st = statusOf(c), b = FD.byGuest[c.guest];
-        const mark = st === 'needs' ? h('span', { class: 'pill neg', text: 'Needs you' }) : st === 'ai' ? h('span', { class: 'pill ai', text: 'AI answered' }) : st === 'waiting' ? h('span', { class: 'pill', text: 'Waiting on guest' }) : h('span', { class: 'pill pos', text: 'Resolved' });
+        const mark = st === 'needs' ? (SERVICE(c) ? h('span', { class: 'pill ' + (KIND_CLS(c) || 'neg'), text: KIND_WORD(c) + (late(c) ? ', late' : '') }) : h('span', { class: 'pill neg', text: 'Needs you' })) : st === 'ai' ? h('span', { class: 'pill ai', text: 'AI answered' }) : st === 'waiting' ? h('span', { class: 'pill', text: 'Waiting on guest' }) : h('span', { class: 'pill pos', text: 'Resolved' });
         return h('button', { class: 'crow' + (c.unread && c.id !== sel ? ' unread' : ''), type: 'button', 'aria-current': String(c.id === sel), onclick: () => { sel = c.id; c.unread = false; remember('c', c.id); paint(); mail.classList.add('open'); } },
           disc(c.guest, b.hue),
           h('div', {},
@@ -175,7 +203,7 @@
           : (LIVE && !(c.escIds && c.escIds.length) ? null : h('button', { class: 'btn sec small', type: 'button', onclick: async () => {
               try { if (LIVE) await window.Alejo.resolve(c.escIds); S.resolved.push(c.id); save(); paint(); } catch (e) { toast(e.message); }
             } }, 'Resolve'))));
-      const need = st === 'needs' ? h('div', { class: 'need' }, h('div', {}, h('b', { text: 'Needs you' }), c.why), c.fact ? h('a', { class: 'btn line small', href: '/app/knowledge.html#' + c.fact }, 'Fill in the fact') : null) : null;
+      const need = st === 'needs' ? h('div', { class: 'need' }, h('div', {}, h('b', { text: SERVICE(c) ? KIND_WORD(c) + ', needs you' + (late(c) ? ' (past the ' + TARGET(c) + ' minute target)' : '') : 'Needs you' }), c.why), c.fact ? h('a', { class: 'btn line small', href: '/app/knowledge.html#' + c.fact }, 'Fill in the fact') : null) : null;
       const ta = h('textarea', { id: 'reply', rows: '3', 'aria-label': 'Reply to ' + c.guest, placeholder: 'Write to ' + c.guest.split(' ')[0] + ' on ' + c.ch + (c.ch === 'Phone' ? ' (sent once they link Telegram)' : '') }); ta.value = st === 'needs' ? (c.suggest || '') : '';
       if (drafts[c.id] !== undefined) ta.value = drafts[c.id];
       ta.addEventListener('input', () => {                          // keep the draft, and show "typing..." to the guest in Telegram while staff write
@@ -271,6 +299,29 @@
       const csv = rows.map((r) => r.map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
       const a = h('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: 'stays-' + tab + '.csv' }); document.body.append(a); a.click(); a.remove();
     });
+    // Desk check: the guest says their stay code, the desk types it, and sees whose stay it is (and whether it is a valid, in-house stay).
+    const vform = $('#vform');
+    if (vform) {
+      const vin = $('#vcode'), vout = $('#vresult');
+      const hit = (cls, label, title, detail) => h('div', { class: 'vhit' }, h('span', { class: 'pill ' + cls, text: label }), h('div', {}, h('b', { text: title }), h('small', { text: detail })));
+      vin.addEventListener('input', () => vout.replaceChildren());
+      vform.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const code = vin.value.replace(/\D/g, '');
+        if (code.length !== 6) { vout.replaceChildren(h('p', { class: 'vmsg', text: 'Type all 6 digits of the stay code.' })); return; }
+        const hits = FD.bookings.filter((b) => b.code && b.code === code);
+        if (!hits.length) { vout.replaceChildren(hit('neg', 'No match', 'No stay has this code', 'Do not treat this person as a verified guest. Check their ID and booking reference.')); return; }
+        const cards = hits.map((b) => {
+          const stay = `${b.type} ${b.room}, ${FD.fmtDay(b.in)} to ${FD.fmtDay(b.out)}, reference ${b.ref}`;
+          if (b.stage >= 4) return hit('neg', 'Stay ended', b.guest, `This stay is over (checked out), so the code is no longer valid. ${stay}.`);
+          if (b.stage >= 2) return hit('pos', 'Verified', b.guest, `In house. ${stay}.`);
+          return hit('warn', 'Not checked in', b.guest, `This booking has not checked in, so the guest should not have a code yet. Check their ID. ${stay}.`);
+        });
+        if (hits.length > 1) cards.push(h('p', { class: 'vmsg', text: 'More than one stay has this code. Confirm the guest\'s name.' }));
+        vout.replaceChildren(...cards);
+      });
+    }
+
     paintSum();
     paint();
     onData(() => { compute(); paintSum(); paint(); });

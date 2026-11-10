@@ -74,7 +74,7 @@
       const stage = b.thanks_sent_at ? 5 : b.status === 'checked_out' ? 4 : b.checkout_reminder_sent_at ? 3 : b.checked_in_at ? 2 : b.reminder_sent_at ? 1 : 0;
       const when = [b.thanks_sent_at && ['Thank-you sent', b.thanks_sent_at], b.status === 'checked_out' && ['Checked out', b.checked_out_at || b.created_at], b.checkout_reminder_sent_at && ['Checkout reminder', b.checkout_reminder_sent_at], b.checked_in_at && ['Checked in', b.checked_in_at], b.reminder_sent_at && ['Reminder sent', b.reminder_sent_at], ['Booked', b.created_at]].find(Boolean);
       const nights = dayNum(b.check_out) - dayNum(b.check_in);
-      return { id: b.id, ref: b.id.slice(0, 8).toUpperCase(), guest: g.name, guestId: g.id, room: b.room_number || 'not assigned', type: b.room_type || 'Room', in: b.check_in, out: b.check_out,
+      return { id: b.id, ref: b.id.slice(0, 8).toUpperCase(), code: String(b.stay_code || ''), guest: g.name, guestId: g.id, room: b.room_number || 'not assigned', type: b.room_type || 'Room', in: b.check_in, out: b.check_out,
         created: b.created_at, src: g.telegram_chat_id ? 'Telegram' : 'Phone', stage, note: when[0] + ' ' + stamp(when[1]), linked: !!g.telegram_chat_id, hue: hue(g.name), nights, total: nights * (RATES[b.room_type] || 0) };
     });
     const byGuest = {};
@@ -97,7 +97,13 @@
       const evs = byG[gid].sort((a, b) => new Date(a.at) - new Date(b.at));
       const open = rows.escalations.filter((e) => e.guest_id === gid && e.status === 'open').sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       const lastGuest = [...evs].reverse().find((e) => e.r === 'guest');
-      conversations.push({ id: gid, guest: g.name, ch: g.telegram_chat_id ? 'Telegram' : 'Phone', ago: ago(evs[evs.length - 1].at), unread: open.length > 0, status: open.length ? 'needs' : 'ai',
+      // a question a person answered counts as resolved, and how long it took is what the Today screen reports
+      const solved = rows.escalations.filter((e) => e.guest_id === gid && e.status === 'answered' && e.answered_at).sort((a, b) => new Date(b.answered_at) - new Date(a.answered_at))[0];
+      const waitMin = open.length ? Math.max(0, Math.round((Date.now() - new Date(open[open.length - 1].created_at).getTime()) / 60000)) : null;
+      const rankK = { emergency: 3, complaint: 2, request: 1, question: 0 }, top = (list) => list.slice().sort((a, b) => (rankK[b.kind] || 0) - (rankK[a.kind] || 0))[0];
+      const svcRow = open.length ? top(open) : solved;
+      const resolvedIn = solved ? Math.max(1, Math.round((new Date(solved.answered_at) - new Date(solved.created_at)) / 60000)) : null;
+      conversations.push({ id: gid, guest: g.name, ch: g.telegram_chat_id ? 'Telegram' : 'Phone', ago: open.length ? ago(open[open.length - 1].created_at) : ago(evs[evs.length - 1].at), waitMins: waitMin, kind: (svcRow && svcRow.kind) || 'question', category: (svcRow && svcRow.category) || null, unread: open.length > 0, status: open.length ? 'needs' : solved ? 'done' : 'ai', resolvedIn,
         topic: open.length ? 'Asked: ' + open[0].question.slice(0, 70) : lastGuest ? lastGuest.x.slice(0, 70) : 'Conversation', lang: '', suggest: '',
         why: open.length ? 'Not in your facts, so the AI held it instead of guessing.' : '', escId: open.length ? open[0].id : null, escIds: open.map((e) => e.id),
         msgs: evs.map((e) => ({ r: e.r, t: stamp(e.at), x: e.x, by: e.by })), last: evs[evs.length - 1].at });

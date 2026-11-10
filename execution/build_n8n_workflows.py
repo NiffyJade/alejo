@@ -267,7 +267,7 @@ def telegram_bot():
     comp = code(w, "Compose reply", booking_js("compose_reply.js"), (3120, -60))
     esc = if_node(w, "Needs staff?", "={{ $json.escalate }}", "boolean", "true", (3340, -60))
     post_staff = tg_send(w, "Alert staff group", str(STAFF_CHAT_ID),
-                         "=🛎 Guest needs help\nGuest: {{ $json.guest_name }}{{ $json.room ? ' (Room ' + $json.room + ')' : '' }}\n"
+                         "={{ $json.alert_title }}\nGuest: {{ $json.guest_name }}{{ $json.room ? ' (Room ' + $json.room + ')' : '' }}\n"
                          "Message: \"{{ $json.question }}\"\n"
                          "{{ $json.ai_answered ? 'AI replied: ' + $json.reply : 'AI could not answer from the knowledge base.' }}\n\n"
                          "Reply to THIS message to answer the guest. Start your reply with #kb to also save it as a general answer.",
@@ -275,6 +275,7 @@ def telegram_bot():
     save_esc = http(w, "Save escalation", "POST", "=" + SB + "/escalations", (3780, -160), prefer="return=minimal",
                     body="={{ JSON.stringify({ guest_id: " + CR + ".guest_id, booking_id: " + CR + ".booking_id, "
                          "guest_chat_id: " + CR + ".chat_id, question: " + CR + ".question, "
+                         "kind: " + CR + ".kind, category: " + CR + ".category, "
                          "staff_message_id: ($json.result ? $json.result.message_id : $json.message_id) }) }}")
     style_rules = []
     for value, key in (("none", "text"), ("confirm", "confirm"), ("phone", "phone")):
@@ -566,6 +567,51 @@ return $input.all().filter(i => i.json.id).map(i => ({{ json: {{ booking_id: i.j
               body="={{ JSON.stringify({ thanks_sent_at: new Date().toISOString() }) }}", prefer="return=minimal")
     w.chain(ctx, close, qc, cc, tc)
     w.link(tc, mc, 0)
+
+    # D: service recovery, part 1. A request, complaint or emergency that is still open goes back to the staff group:
+    # every 30 minutes (every 10 for an emergency), at most 3 times, and the last one says to tell the duty manager.
+    qd = http(w, "Open service items", "GET",
+              "=" + SB + "/escalations?status=eq.open&kind=neq.question&select=id,kind,category,question,created_at,reminded_at,remind_count,guests(name)",
+              (900, 900), always=True)
+    cd = code(w, "Compose re-alerts", """
+const now = Date.now();
+const LABEL = { emergency: 'EMERGENCY', complaint: 'complaint', request: 'request' };
+return $input.all().map(i => i.json).filter(e => e.id).filter(e => {
+  const every = (e.kind === 'emergency' ? 10 : 30) * 60000;
+  return (e.remind_count || 0) < 3 && now - Date.parse(e.reminded_at || e.created_at) >= every;
+}).map(e => {
+  const mins = Math.round((now - Date.parse(e.created_at)) / 60000), n = (e.remind_count || 0) + 1;
+  return { json: { id: e.id, remind_count: n,
+    text: `⏰ Still open after ${mins} min: ${LABEL[e.kind] || 'request'}${e.category ? ' (' + e.category + ')' : ''}\\nGuest: ${(e.guests && e.guests.name) || 'Unknown guest'}\\n"${e.question}"\\n\\n` +
+      `Reply to the original alert to answer the guest, or open the Alejo dashboard and tap Resolve.` +
+      (n >= 3 ? '\\n\\n🚨 This is the last reminder. Please tell the duty manager.' : '') } };
+});
+""", (1120, 900))
+    td = tg_send(w, "Re-alert staff group", str(STAFF_CHAT_ID), "={{ $json.text }}", (1340, 900), onError="continueErrorOutput")
+    md = http(w, "Mark re-alerted", "PATCH", "=" + SB + "/escalations?id=eq.{{ $('Compose re-alerts').item.json.id }}", (1560, 900),
+              body="={{ JSON.stringify({ reminded_at: new Date().toISOString(), remind_count: $('Compose re-alerts').item.json.remind_count }) }}",
+              prefer="return=minimal")
+    w.chain(ctx, qd, cd, td)
+    w.link(td, md, 0)
+
+    # E: service recovery, part 2. About 30 minutes after staff answered a request or complaint, ask the guest once whether it is
+    # sorted. If they say no, their reply goes through the normal path and is tracked as a new item. Only the last 24 hours, so
+    # switching this on never messages old guests.
+    qe = http(w, "Answered service items", "GET",
+              "=" + SB + "/escalations?status=eq.answered&kind=neq.question&guest_checked_at=is.null"
+              "&answered_at=lt.{{ $('Context').first().json.cutoff }}&answered_at=gt.{{ new Date(Date.now() - 86400000).toISOString() }}"
+              "&select=id,guest_chat_id,kind,category", (900, 1200), always=True)
+    ce = code(w, "Compose guest follow-ups", """
+const WORD = { maintenance: 'maintenance', housekeeping: 'housekeeping', food: 'food', transport: 'transport', booking: 'booking', other: 'service' };
+return $input.all().map(i => i.json).filter(e => e.id && e.guest_chat_id).map(e => ({ json: { id: e.id, chat_id: e.guest_chat_id,
+  text: `Hello! Just checking in: has your ${WORD[e.category] || 'service'} ${e.kind === 'complaint' ? 'issue' : 'request'} been sorted out?\\n\\n` +
+    `If anything is still not right, reply here and I will alert our team again.` } }));
+""", (1120, 1200))
+    te = tg_send(w, "Ask guest if it is sorted", "={{ $json.chat_id }}", "={{ $json.text }}", (1340, 1200), menu=True, onError="continueErrorOutput")
+    me = http(w, "Mark guest asked", "PATCH", "=" + SB + "/escalations?id=eq.{{ $('Compose guest follow-ups').item.json.id }}", (1560, 1200),
+              body="={{ JSON.stringify({ guest_checked_at: new Date().toISOString() }) }}", prefer="return=minimal")
+    w.chain(ctx, qe, ce, te)
+    w.link(te, me, 0)
     return w
 
 
@@ -1006,7 +1052,7 @@ def upsert(w):
 
 if __name__ == "__main__":
     ids = {}
-    ONLY = {"--only-keepalive": (typing_keepalive,), "--only-telegram": (telegram_bot,), "--only-vapi": (vapi_tools,), "--only-demo-alert": (demo_alert,), "--only-dashboard-reply": (dashboard_reply,), "--only-typing": (typing_signal,)}
+    ONLY = {"--only-keepalive": (typing_keepalive,), "--only-telegram": (telegram_bot,), "--only-vapi": (vapi_tools,), "--only-demo-alert": (demo_alert,), "--only-dashboard-reply": (dashboard_reply,), "--only-typing": (typing_signal,), "--only-scheduler": (scheduler,)}
     picked = [b for flag, b in ONLY.items() if flag in sys.argv]
     builds = picked[0] if picked else (typing_keepalive, telegram_bot, scheduler, booking_created, vapi_tools, demo_alert, dashboard_reply, typing_signal)
     for build in builds:
