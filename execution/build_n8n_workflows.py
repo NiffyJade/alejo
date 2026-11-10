@@ -320,8 +320,24 @@ def telegram_bot():
         "options": {"waitForSubWorkflow": False}}, (480, -140), ver=1.2, onError="continueRegularOutput")
     w.link(sw, typing1, 3)
     w.chain(ctx, bp, llm, parse, plan, avail, comp, esc)
-    w.link(esc, post_staff, 0)
+    # A guest chasing an open item ("any update?") does not create a second item: the existing one is nudged instead.
+    chasing = if_node(w, "Chasing an open item?", "={{ $json.chase }}", "boolean", "true", (3450, -60))
+    due = if_node(w, "Alert staff again?", "={{ $json.chase_alert }}", "boolean", "true", (3560, 120))
+    chase_alert = tg_send(w, "Alert staff (chasing)", str(STAFF_CHAT_ID), "={{ $json.chase_text }}", (3780, 120))
+    mark_chase = http(w, "Mark chased", "PATCH", "=" + SB + "/escalations?id=eq.{{ " + CR + ".chase_id }}", (4000, 120),
+                      body="={{ JSON.stringify({ chase_count: " + CR + ".chase_next, last_chased_at: new Date().toISOString() }) }}",
+                      prefer="return=minimal", onError="continueRegularOutput")
+    count_chase = http(w, "Count chase (no alert)", "PATCH", "=" + SB + "/escalations?id=eq.{{ " + CR + ".chase_id }}", (3780, 240),
+                       body="={{ JSON.stringify({ chase_count: " + CR + ".chase_next }) }}", prefer="return=minimal", onError="continueRegularOutput")
+    w.link(esc, chasing, 0)
+    w.link(chasing, post_staff, 1)
     w.chain(post_staff, save_esc, style)
+    w.link(chasing, due, 0)
+    w.link(due, chase_alert, 0)
+    w.link(chase_alert, mark_chase)
+    w.link(mark_chase, style)
+    w.link(due, count_chase, 1)
+    w.link(count_chase, style)
     w.link(esc, style, 1)
     w.link(style, send_text, 0)
     w.link(style, send_confirm, 1)

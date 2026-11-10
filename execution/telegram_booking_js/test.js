@@ -20,9 +20,9 @@ const AVAIL = (over = {}) => [['Standard', 35000, 4], ['Deluxe', 55000, 2], ['Su
   .map(([room_type, nightly_rate, n]) => ({ room_type, nightly_rate, available_rooms: over[room_type] ?? n }));
 
 // One full turn: model output -> Parse AI -> Plan booking -> (availability rows) -> Compose reply
-function turn({ say, llm, draft = {}, guest = {}, rows = AVAIL() }) {
+function turn({ say, llm, draft = {}, guest = {}, rows = AVAIL(), open = [] }) {
   const ctx = { chat_id: 1, text: say, from_name: 'Ada', guest_id: guest.id || '', guest_name: guest.name || '', guest_phone: guest.phone || '',
-    booking_id: null, room: '', today: TODAY, rooms: ROOMS, draft, hotel: 'BrightSide Hotel' };
+    booking_id: null, room: '', today: TODAY, rooms: ROOMS, draft, hotel: 'BrightSide Hotel', open_items: open };
   const ai = { message: { content: [{ type: 'text', text: JSON.stringify({ can_answer: true, notify_staff: false, answer: '', ...llm }) }] } };
   const parsed = run('parse_ai.js', { 'Build prompt': [ctx] }, [ai]);
   const plan = run('plan_booking.js', { 'Parse AI': parsed }, parsed);
@@ -268,4 +268,33 @@ ok('an arrival time is passed to staff as a plain question and the guest gets th
   assert(t.out.escalate); assert.strictEqual(t.out.kind, 'question'); assert(/11 PM/.test(t.out.reply), t.out.reply);
   assert.strictEqual(t.out.alert_title, '🛎 Guest needs help');
 });
-console.log(n + ' tests passed (arrival time included)');
+// ---- chasing an open item
+const ITEM = (over = {}) => ({ id: 'e1', kind: 'request', category: 'housekeeping', question: 'Towels to room 206', created_at: new Date(Date.now() - 25 * 60000).toISOString(), chase_count: 0, last_chased_at: null, assigned_to: 'Tunde B.', ...over });
+const NEW_REQ = { intent: 'other', can_answer: false, notify_staff: true, kind: 'request', category: 'housekeeping' };
+ok('"any update?" with an open request nudges staff about that item instead of creating a new one', () => {
+  const t = turn({ say: 'any update on my towels?', llm: NEW_REQ, open: [ITEM()] });
+  assert(t.out.chase); assert.strictEqual(t.out.chase_id, 'e1'); assert.strictEqual(t.out.chase_next, 1); assert(t.out.chase_alert); assert(t.out.escalate);
+  assert(/nudged our housekeeping team/.test(t.out.reply) && /25 min/.test(t.out.reply), t.out.reply);
+  assert(/Guest is chasing \(open 25 min, chased 1x\)/.test(t.out.chase_text) && /Owner: Tunde B\./.test(t.out.chase_text), t.out.chase_text);
+});
+ok('a chase in Pidgin gets a Pidgin reply', () => {
+  const t = turn({ say: 'abeg i dey wait since', llm: NEW_REQ, open: [ITEM()] });
+  assert(t.out.chase); assert(/dem go update you/i.test(t.out.reply), t.out.reply);
+});
+ok('a second chase within 5 minutes updates the count but does not alert the staff group again', () => {
+  const t = turn({ say: 'still waiting please', llm: NEW_REQ, open: [ITEM({ chase_count: 1, last_chased_at: new Date(Date.now() - 2 * 60000).toISOString() })] });
+  assert(t.out.chase); assert.strictEqual(t.out.chase_next, 2); assert.strictEqual(t.out.chase_alert, false);
+});
+ok('without an open item, "any update?" is an ordinary message', () => {
+  const t = turn({ say: 'any update on my towels?', llm: NEW_REQ, open: [] });
+  assert(!t.out.chase); assert.strictEqual(t.out.kind, 'request');
+});
+ok('a long or unrelated message while something is open is not treated as a chase', () => {
+  const t = turn({ say: 'what time does the restaurant open for breakfast?', llm: { intent: 'info', can_answer: true, notify_staff: false, answer: 'Breakfast is 6:30 to 10:30.' }, open: [ITEM()] });
+  assert(!t.out.chase); assert(/Breakfast/.test(t.out.reply));
+});
+ok('a new, different request while one is open is still its own item when it does not sound like a chase', () => {
+  const t = turn({ say: 'my room needs a plumber now', llm: { intent: 'other', can_answer: false, notify_staff: true, kind: 'complaint', category: 'maintenance' }, open: [ITEM()] });
+  assert(!t.out.chase); assert.strictEqual(t.out.kind, 'complaint');
+});
+console.log(n + ' tests passed (chasing included)');

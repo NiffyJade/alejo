@@ -36,7 +36,8 @@
   const waitMins = (c) => { if (c.waitMins != null) return c.waitMins; const m = /^(\d+)\s*(min|h|d)/.exec(c.ago || ''); return m ? +m[1] * { min: 1, h: 60, d: 1440 }[m[2]] : 0; };
   const late = (c) => SERVICE(c) && statusOf(c) === 'needs' && waitMins(c) > TARGET(c);
   const urgency = (c) => (statusOf(c) !== 'needs' ? 3 : c.kind === 'emergency' ? 0 : SERVICE(c) ? 1 : 2);
-  const ownerWord = (c) => (c.owner ? 'Owner: ' + c.owner : 'Nobody has taken it');
+  const chasedWord = (c) => (c.chased ? ', guest has chased ' + c.chased + 'x' : '');
+  const ownerWord = (c) => (c.owner ? 'Owner: ' + c.owner : 'Nobody has taken it') + chasedWord(c);
   const meName = () => (LIVE ? (window.Alejo.me && (window.Alejo.me.name || window.Alejo.me.email)) || 'Staff' : 'Amaka O.');
   // "Take it": say who is handling a request, so two people do not both chase it. Taking over from someone else is allowed.
   const takeBtn = (c, st, repaint) => {
@@ -169,7 +170,7 @@
     const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
     const show = (lines, cls) => { out.hidden = false; out.className = 'answer' + (cls ? ' ' + cls : ''); out.replaceChildren(...lines.map((l) => h('p', { class: /:$/.test(l) ? 'a-h' : '', text: l }))); };
     const person = (b) => `${b.guest}, ${b.type} ${b.room}, ${b.linked === false && b.stage === 0 ? 'not on Telegram yet' : FD.STAGE_WORD[b.stage].toLowerCase()}`;
-    const itemLine = (c) => `• ${c.guest}, ${SERVICE(c) ? KIND_WORD(c).toLowerCase() : 'question'}, ${c.ago}${late(c) ? ', late' : ''}${SERVICE(c) ? ', ' + (c.owner ? 'owner ' + c.owner : 'nobody has taken it') : ''}`;
+    const itemLine = (c) => `• ${c.guest}, ${SERVICE(c) ? KIND_WORD(c).toLowerCase() : 'question'}, ${c.ago}${late(c) ? ', late' : ''}${SERVICE(c) ? ', ' + (c.owner ? 'owner ' + c.owner : 'nobody has taken it') + chasedWord(c) : ''}`;
     const urgent = () => needs().sort((a, b) => (a.kind === 'emergency' ? 0 : SERVICE(a) ? 1 : 2) - (b.kind === 'emergency' ? 0 : SERVICE(b) ? 1 : 2) || waitMins(b) - waitMins(a));
     const nextDay = () => new Date((FD.day(FD.NOW.date) + 1) * 86400000).toISOString().slice(0, 10);
     const A = {

@@ -78,5 +78,5 @@ messages.push({ role: 'user', content: userText });
 return [{ json: { chat_id: chat.chat_id, text: chat.text || '', from_name: chat.from_name || '',
   guest_id: guest.id || '', guest_name: guest.name || '', guest_phone: guest.phone || '',
   booking_id: b ? b.id : null, room: b && b.room_number || '',
-  today, rooms, draft, hotel: settings.HOTEL_NAME || '__HOTEL__',
+  today, rooms, draft, hotel: settings.HOTEL_NAME || '__HOTEL__', open_items: data.open_items || [],
   body: { model: '__MODEL__', temperature: 0, messages, response_format: { type: 'json_object' } } } }];

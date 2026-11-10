@@ -112,7 +112,7 @@
         { r: 'note', t: '26 Oct, 18:30', x: 'Phone call, 3 min 50 s, from +234 809 000 0000 (sample).' },
         { r: 'ai', t: '18:34', x: 'Booked. Deluxe room, 30 October to 1 November, 2 nights, estimated total ₦110,000. Reference AL-1044.' },
       ] },
-    { id: 'c13', guest: 'Ibrahim Danjuma', ch: 'Telegram', ago: '48 min', unread: true, status: 'needs', kind: 'complaint', category: 'maintenance', owner: 'Tunde B.', topic: 'AC in Suite 302 is not cooling', lang: 'English',
+    { id: 'c13', guest: 'Ibrahim Danjuma', ch: 'Telegram', ago: '48 min', unread: true, status: 'needs', kind: 'complaint', category: 'maintenance', owner: 'Tunde B.', chased: 2, topic: 'AC in Suite 302 is not cooling', lang: 'English',
       suggest: "Sorry about that, Sir. Maintenance is on the way to Suite 302 now.",
       why: 'A repair needs a person. Alejo has re-alerted your staff group once.',
       msgs: [

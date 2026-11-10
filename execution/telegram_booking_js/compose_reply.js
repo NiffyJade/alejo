@@ -75,5 +75,5 @@ const row = { chat_id: p.chat_id, check_in: d.check_in, check_out: d.check_out, 
 return [{ json: { chat_id: p.chat_id, guest_id: p.guest_id || null, booking_id: p.booking_id || null, room: p.room,
   guest_name: p.guest_name || (p.from_name ? p.from_name + ' (not linked to a booking)' : 'Unknown guest'),
   question: p.question, reply, escalate, ai_answered: ai, markup, confirm_data: confirm,
-  kind, category, alert_title,
+  kind, category, alert_title, chase: !!p.chase, chase_id: p.chase_id || null, chase_next: p.chase_next || 0, chase_alert: !!p.chase_alert, chase_text: p.chase_text || '',
   save_draft: !!(p.booking_flow || p.draft_changed), draft_row: row } }];

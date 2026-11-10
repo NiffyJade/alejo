@@ -102,10 +102,10 @@
       const waitMin = open.length ? Math.max(0, Math.round((Date.now() - new Date(open[open.length - 1].created_at).getTime()) / 60000)) : null;
       const rankK = { emergency: 3, complaint: 2, request: 1, question: 0 }, top = (list) => list.slice().sort((a, b) => (rankK[b.kind] || 0) - (rankK[a.kind] || 0))[0];
       const svcRow = open.length ? top(open) : solved;
-      const owner = (open.find((e) => e.assigned_to) || {}).assigned_to || null;
+      const owner = (open.find((e) => e.assigned_to) || {}).assigned_to || null, chased = open.reduce((n, e) => n + (e.chase_count || 0), 0);
       const kindWhy = { emergency: 'Danger words were used. Staff were alerted at once.', complaint: 'A complaint needs a person. Staff were alerted.', request: 'A request needs a person. Staff were alerted.' };
       const resolvedIn = solved ? Math.max(1, Math.round((new Date(solved.answered_at) - new Date(solved.created_at)) / 60000)) : null;
-      conversations.push({ id: gid, guest: g.name, ch: g.telegram_chat_id ? 'Telegram' : 'Phone', ago: open.length ? ago(open[open.length - 1].created_at) : ago(evs[evs.length - 1].at), waitMins: waitMin, kind: (svcRow && svcRow.kind) || 'question', category: (svcRow && svcRow.category) || null, unread: open.length > 0, status: open.length ? 'needs' : solved ? 'done' : 'ai', resolvedIn,
+      conversations.push({ id: gid, chased, guest: g.name, ch: g.telegram_chat_id ? 'Telegram' : 'Phone', ago: open.length ? ago(open[open.length - 1].created_at) : ago(evs[evs.length - 1].at), waitMins: waitMin, kind: (svcRow && svcRow.kind) || 'question', category: (svcRow && svcRow.category) || null, unread: open.length > 0, status: open.length ? 'needs' : solved ? 'done' : 'ai', resolvedIn,
         topic: open.length ? 'Asked: ' + open[0].question.slice(0, 70) : lastGuest ? lastGuest.x.slice(0, 70) : 'Conversation', lang: '', suggest: '',
         owner, why: open.length ? (kindWhy[svcRow.kind] || 'Not in your facts, so the AI held it instead of guessing.') : '', escId: open.length ? open[0].id : null, escIds: open.map((e) => e.id),
         msgs: evs.map((e) => ({ r: e.r, t: stamp(e.at), x: e.x, by: e.by })), last: evs[evs.length - 1].at });
