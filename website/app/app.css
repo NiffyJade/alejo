@@ -96,6 +96,8 @@ a { color: inherit; text-decoration: none; }
 .pill.warn { background: var(--warning-soft); color: var(--warning); }
 .pill.ai { background: var(--ai-soft); color: var(--ai); }
 .pill.kind { height: 20px; margin-right: 6px; font-size: 12px; vertical-align: 1px; }
+.owner { color: var(--muted); font-size: 13px; }
+.owner.none { color: var(--warning); }
 .qrow .wait.late { color: var(--negative); font-weight: 600; }
 .kpi.warn b { color: var(--negative); }
 .disc { width: 32px; height: 32px; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; background: hsl(var(--h, 212) 62% 91%); color: hsl(var(--h, 212) 52% 24%); }

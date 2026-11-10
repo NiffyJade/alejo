@@ -36,6 +36,16 @@
   const waitMins = (c) => { if (c.waitMins != null) return c.waitMins; const m = /^(\d+)\s*(min|h|d)/.exec(c.ago || ''); return m ? +m[1] * { min: 1, h: 60, d: 1440 }[m[2]] : 0; };
   const late = (c) => SERVICE(c) && statusOf(c) === 'needs' && waitMins(c) > TARGET(c);
   const urgency = (c) => (statusOf(c) !== 'needs' ? 3 : c.kind === 'emergency' ? 0 : SERVICE(c) ? 1 : 2);
+  const ownerWord = (c) => (c.owner ? 'Owner: ' + c.owner : 'Nobody has taken it');
+  const meName = () => (LIVE ? (window.Alejo.me && (window.Alejo.me.name || window.Alejo.me.email)) || 'Staff' : 'Amaka O.');
+  // "Take it": say who is handling a request, so two people do not both chase it. Taking over from someone else is allowed.
+  const takeBtn = (c, st, repaint) => {
+    if (st !== 'needs' || !SERVICE(c) || (LIVE && !(c.escIds || []).length)) return null;
+    const me = meName(), mine = c.owner === me;
+    return h('button', { class: 'btn line small', type: 'button', onclick: async () => {
+      try { if (LIVE) { await window.Alejo.take(c.escIds, mine ? null : me); await window.Alejo.refresh(); } else { c.owner = mine ? null : me; repaint(); } } catch (e) { toast(e.message); }
+    } }, mine ? 'Release' : c.owner ? 'Take over' : 'Take it');
+  };
   const kindPill = (c) => (SERVICE(c) ? h('span', { class: 'pill kind ' + KIND_CLS(c), text: KIND_WORD(c) }) : null);
   const dataHandlers = [];
   const onData = (fn) => dataHandlers.push(fn);                      // live.js announces fresh rows with an "alejo:data" event
@@ -106,6 +116,8 @@
     if (held.length && !waiting.some((c) => c.fact)) sug.push({ t: `Switch on ${plural(held.length, 'held-back answer', 'held-back answers')}`, d: `Fill in ${plural(blank.length, 'fact', 'facts')} and guests get these answers without waiting for staff.`, href: '/app/knowledge.html?tab=held', cta: 'Open Facts' });
     const soon = B.filter((b) => b.linked === false && b.stage < 2 && FD.day(b.in) - FD.day(today) <= 2 && FD.day(b.in) >= FD.day(today));
     if (soon.length) sug.push({ t: `${plural(soon.length, 'guest arrives', 'guests arrive')} within 2 days without Telegram`, d: `${soon.slice(0, 3).map((b) => b.guest.split(' ')[0]).join(', ')}: their reminder and check-in button cannot reach them. Ask them to share their number with the bot.`, href: '/app/bookings.html?tab=arriving', cta: 'See stays' });
+    const loose = waiting.filter((c) => SERVICE(c) && !c.owner);
+    if (loose.length) sug.unshift({ t: `${plural(loose.length, 'request has', 'requests have')} no owner`, d: 'Open it and tap Take it, so staff know who is handling it.', href: '/app/inbox.html?c=' + encodeURIComponent(loose[0].id), cta: 'Open' });
     const slow = waiting.filter(late);
     if (slow.length) sug.unshift({ t: `${plural(slow.length, 'request is', 'requests are')} past the ${slow.some((c) => c.kind === 'emergency') ? '10 minute emergency' : '30 minute'} target`, d: slow.slice(0, 2).map((c) => `${c.guest.split(' ')[0]}: ${KIND_WORD(c).toLowerCase()}, ${c.ago}`).join('. ') + '. Alejo keeps re-alerting your staff group while they stay open; a reply or Resolve closes them.', href: '/app/inbox.html?c=' + encodeURIComponent(slow[0].id), cta: 'Open' });
     $('#ovSug').replaceChildren(...(sug.length ? sug.slice(0, 3).map((s) => h('div', { class: 'sug' }, h('div', {}, h('b', { text: s.t }), h('small', { text: s.d })), h('a', { class: 'btn line small', href: s.href }, s.cta))) : [h('p', { class: 'foot-note', text: 'Nothing to suggest. Questions are being settled and every guest can be reached.' })]));
@@ -113,7 +125,7 @@
     // who is waiting
     $('#ovNeeds').replaceChildren(...(waiting.length ? waiting.slice(0, 4).map((c) => h('div', { class: 'qrow' },
       disc(c.guest, FD.byGuest[c.guest].hue),
-      h('div', {}, h('b', { text: c.guest }), h('small', {}, kindPill(c), c.topic), c.why ? h('small', { class: 'why', text: c.why }) : null),
+      h('div', {}, h('b', { text: c.guest }), h('small', {}, kindPill(c), c.topic), c.why ? h('small', { class: 'why', text: c.why }) : null, SERVICE(c) ? h('small', { class: 'owner' + (c.owner ? '' : ' none'), text: ownerWord(c) }) : null),
       h('span', { class: 'wait' + (late(c) ? ' late' : ''), text: c.ago + (late(c) ? ', late' : '') }),
       h('a', { class: 'btn line small', href: '/app/inbox.html?c=' + encodeURIComponent(c.id), 'aria-label': 'Reply to ' + c.guest }, 'Reply'))) : [h('p', { class: 'foot-note', text: 'Nobody is waiting on you.' })]));
 
@@ -198,12 +210,12 @@
       const head = h('div', { class: 'pane-head' },
         h('div', { class: 'who' }, h('button', { class: 'btn line small back', type: 'button', onclick: () => mail.classList.remove('open') }, 'Back'), disc(c.guest, b.hue),
           h('div', {}, h('h2', { text: c.guest }), h('p', { class: 'sub', text: `${[c.ch, c.lang].filter(Boolean).join(', ')}. ${c.topic}` }))),
-        h('div', { class: 'actions' }, st === 'done'
+        h('div', { class: 'actions' }, takeBtn(c, st, paint), st === 'done'
           ? (LIVE ? null : h('button', { class: 'btn sec small', type: 'button', onclick: () => { S.resolved = S.resolved.filter((i) => i !== c.id); c.status = c.status === 'done' ? 'waiting' : c.status; save(); paint(); } }, 'Reopen'))
           : (LIVE && !(c.escIds && c.escIds.length) ? null : h('button', { class: 'btn sec small', type: 'button', onclick: async () => {
               try { if (LIVE) await window.Alejo.resolve(c.escIds); S.resolved.push(c.id); save(); paint(); } catch (e) { toast(e.message); }
             } }, 'Resolve'))));
-      const need = st === 'needs' ? h('div', { class: 'need' }, h('div', {}, h('b', { text: SERVICE(c) ? KIND_WORD(c) + ', needs you' + (late(c) ? ' (past the ' + TARGET(c) + ' minute target)' : '') : 'Needs you' }), c.why), c.fact ? h('a', { class: 'btn line small', href: '/app/knowledge.html#' + c.fact }, 'Fill in the fact') : null) : null;
+      const need = st === 'needs' ? h('div', { class: 'need' }, h('div', {}, h('b', { text: SERVICE(c) ? KIND_WORD(c) + ', needs you' + (late(c) ? ' (past the ' + TARGET(c) + ' minute target)' : '') : 'Needs you' }), c.why, SERVICE(c) ? h('small', { class: 'owner' + (c.owner ? '' : ' none'), style: 'display:block', text: ownerWord(c) }) : null), c.fact ? h('a', { class: 'btn line small', href: '/app/knowledge.html#' + c.fact }, 'Fill in the fact') : null) : null;
       const ta = h('textarea', { id: 'reply', rows: '3', 'aria-label': 'Reply to ' + c.guest, placeholder: 'Write to ' + c.guest.split(' ')[0] + ' on ' + c.ch + (c.ch === 'Phone' ? ' (sent once they link Telegram)' : '') }); ta.value = st === 'needs' ? (c.suggest || '') : '';
       if (drafts[c.id] !== undefined) ta.value = drafts[c.id];
       ta.addEventListener('input', () => {                          // keep the draft, and show "typing..." to the guest in Telegram while staff write
@@ -229,7 +241,7 @@
       } }, 'Send reply');
       const composer = h('div', { class: 'composer' }, ta,
         h('div', { class: 'row2' }, st === 'needs' && !c.fact ? h('label', { class: 'check', for: 'keep' }, keep, LIVE ? 'Save as an answer for future guests' : 'Save my answer to Facts') : h('span', { class: 'sub', text: '' }), sendBtn));
-      if (LIVE && !c.escId) { ta.disabled = true; ta.value = ''; ta.placeholder = 'Nothing is waiting for a reply here.'; sendBtn.disabled = true; }
+      if (LIVE && !c.escId) { ta.disabled = true; ta.value = ''; ta.placeholder = c.phone && st === 'needs' ? 'Phone caller: call ' + c.phone + ' back, then press Resolve.' : 'Nothing is waiting for a reply here.'; sendBtn.disabled = true; }
       pane.replaceChildren(head, need, h('div', { class: 'thread', id: 'thread', tabindex: '0', 'aria-label': 'Conversation' }, bubbles), composer);
       const th = $('#thread'); th.scrollTop = th.scrollHeight;
     };

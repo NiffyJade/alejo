@@ -87,7 +87,7 @@
     const saved = new Set(rows.kb.map((k) => k.id));                // answers staff chose to keep for future guests
     rows.escalations.forEach((e) => {
       if (!e.guest_id) return;
-      put(e.guest_id, { at: e.created_at, r: 'note', x: e.status === 'open' ? 'Not in your facts, so the AI held it instead of guessing. Sent to staff, waiting for a reply.' : 'Sent to staff.' });
+      put(e.guest_id, { at: e.created_at, r: 'note', x: e.kind && e.kind !== 'question' ? 'Logged as a ' + (e.category ? e.category + ' ' : '') + e.kind + '. Alert sent to the staff group.' : e.status === 'open' ? 'Not in your facts, so the AI held it instead of guessing. Sent to staff, waiting for a reply.' : 'Sent to staff.' });
       if (e.status === 'answered' && e.staff_answer) put(e.guest_id, { at: e.answered_at || e.created_at, r: 'staff', by: 'Staff', x: e.staff_answer });
       if (e.status === 'answered' && e.staff_answer && saved.has('staff-' + e.id)) put(e.guest_id, { at: new Date(new Date(e.answered_at || e.created_at).getTime() + 1).toISOString(), r: 'note', x: 'Saved to Facts as an answer for next time.' });
     });
@@ -102,11 +102,24 @@
       const waitMin = open.length ? Math.max(0, Math.round((Date.now() - new Date(open[open.length - 1].created_at).getTime()) / 60000)) : null;
       const rankK = { emergency: 3, complaint: 2, request: 1, question: 0 }, top = (list) => list.slice().sort((a, b) => (rankK[b.kind] || 0) - (rankK[a.kind] || 0))[0];
       const svcRow = open.length ? top(open) : solved;
+      const owner = (open.find((e) => e.assigned_to) || {}).assigned_to || null;
+      const kindWhy = { emergency: 'Danger words were used. Staff were alerted at once.', complaint: 'A complaint needs a person. Staff were alerted.', request: 'A request needs a person. Staff were alerted.' };
       const resolvedIn = solved ? Math.max(1, Math.round((new Date(solved.answered_at) - new Date(solved.created_at)) / 60000)) : null;
       conversations.push({ id: gid, guest: g.name, ch: g.telegram_chat_id ? 'Telegram' : 'Phone', ago: open.length ? ago(open[open.length - 1].created_at) : ago(evs[evs.length - 1].at), waitMins: waitMin, kind: (svcRow && svcRow.kind) || 'question', category: (svcRow && svcRow.category) || null, unread: open.length > 0, status: open.length ? 'needs' : solved ? 'done' : 'ai', resolvedIn,
         topic: open.length ? 'Asked: ' + open[0].question.slice(0, 70) : lastGuest ? lastGuest.x.slice(0, 70) : 'Conversation', lang: '', suggest: '',
-        why: open.length ? 'Not in your facts, so the AI held it instead of guessing.' : '', escId: open.length ? open[0].id : null, escIds: open.map((e) => e.id),
+        owner, why: open.length ? (kindWhy[svcRow.kind] || 'Not in your facts, so the AI held it instead of guessing.') : '', escId: open.length ? open[0].id : null, escIds: open.map((e) => e.id),
         msgs: evs.map((e) => ({ r: e.r, t: stamp(e.at), x: e.x, by: e.by })), last: evs[evs.length - 1].at });
+    });
+    rows.escalations.filter((e) => !e.guest_id).forEach((e) => {       // a phone caller's request: no Telegram chat, closed here with Resolve after the call-back
+      const isOpen = e.status === 'open', at = isOpen ? e.created_at : (e.answered_at || e.created_at);
+      conversations.push({ id: 'esc-' + e.id, guest: e.caller_name || 'Phone caller', ch: 'Phone', phone: e.caller_phone || '', ago: ago(isOpen ? e.created_at : at), waitMins: isOpen ? Math.max(0, Math.round((Date.now() - new Date(e.created_at).getTime()) / 60000)) : null,
+        kind: e.kind || 'question', category: e.category || null, owner: e.assigned_to || null, unread: isOpen, status: isOpen ? 'needs' : 'done',
+        resolvedIn: !isOpen && e.answered_at ? Math.max(1, Math.round((new Date(e.answered_at) - new Date(e.created_at)) / 60000)) : null,
+        topic: (e.kind && e.kind !== 'question' ? 'Phone: ' : 'Asked by phone: ') + e.question.slice(0, 70), lang: '', suggest: '',
+        why: isOpen ? 'Call them back' + (e.caller_phone ? ' on ' + e.caller_phone : '') + ', then press Resolve.' : '', escId: null, escIds: isOpen ? [e.id] : [],
+        msgs: [{ r: 'note', t: stamp(e.created_at), x: 'Phone call' + (e.caller_phone ? ' from ' + e.caller_phone : '') + '.' }, { r: 'guest', t: stamp(e.created_at), x: e.question },
+          { r: 'note', t: stamp(e.created_at), x: 'Logged as a ' + (e.category ? e.category + ' ' : '') + (e.kind || 'question') + '. Alert sent to the staff group.' }].concat(isOpen ? [] : [{ r: 'note', t: stamp(at), x: 'Resolved by staff.' }]),
+        last: at });
     });
     bookings.filter((b) => !b.linked && !byG[b.guestId] && b.stage < 4).forEach((b) => conversations.push({ id: b.guestId, guest: b.guest, ch: 'Phone', ago: ago(b.created || new Date().toISOString()), unread: false, status: 'waiting',
       topic: 'Booked by phone, not on Telegram yet', lang: '', suggest: '', why: '', escId: null, escIds: [],
@@ -138,6 +151,7 @@
     saveFact: (key, value) => rest('hotel_settings?on_conflict=key', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ key, value, updated_at: new Date().toISOString() }) }),
     deleteAnswer: (id) => rest('knowledge_entries?id=eq.' + encodeURIComponent(id), { method: 'DELETE', headers: { prefer: 'return=minimal' } }),
     addAnswer: (q, a) => rest('knowledge_entries', { method: 'POST', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ id: 'staff-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())), category: 'staff', question: q, answer: a, source: 'staff' }) }),
+    take: (ids, name) => rest('escalations?id=in.(' + ids.join(',') + ')&status=eq.open', { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ assigned_to: name, assigned_at: name ? new Date().toISOString() : null }) }),   // name = null releases it
     clock: () => clock(new Date()),
     async typing(escId) {                                           // shows "typing..." to the guest in Telegram while staff write (about 5 s each time)
       const t = await token();
