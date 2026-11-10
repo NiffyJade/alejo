@@ -261,3 +261,11 @@ ok('a model reply that promises "right away" is replaced by the fixed message fo
   assert(!/right away|on the way/.test(t.out.reply), t.out.reply); assert(/housekeeping team/.test(t.out.reply), t.out.reply); assert.strictEqual(t.out.kind, 'request');
 });
 console.log(n + ' tests passed (service recovery included)');
+
+// ---- proactive follow-up: a guest replying to the evening "running late?" message
+ok('an arrival time is passed to staff as a plain question and the guest gets the courteous reply', () => {
+  const t = turn({ say: "I'll be arriving around 11pm", llm: { intent: 'other', can_answer: true, notify_staff: true, kind: 'question', answer: 'Thank you, I have told our team to expect you around 11 PM.' } });
+  assert(t.out.escalate); assert.strictEqual(t.out.kind, 'question'); assert(/11 PM/.test(t.out.reply), t.out.reply);
+  assert.strictEqual(t.out.alert_title, '🛎 Guest needs help');
+});
+console.log(n + ' tests passed (arrival time included)');

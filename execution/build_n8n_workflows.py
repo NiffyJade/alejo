@@ -503,7 +503,7 @@ return [{ json: { now: now.toISOString(), today: iso(lagos), tomorrow: iso(new D
     ctx = code(w, "Context", """
 const t = $('Now (Lagos)').first().json;
 const settings = Object.fromEntries($input.all().map(i => [i.json.key, (i.json.value || '').trim()]));
-return [{ json: { ...t, settings, REMINDER_HOUR: 10, CHECKOUT_HOUR: 8 } }];
+return [{ json: { ...t, settings, REMINDER_HOUR: 10, CHECKOUT_HOUR: 8, ARRIVAL_CHECK_HOUR: 18, ARRIVAL_CHECK_LAST_HOUR: 22 } }];
 """, (660, 300))
     w.chain(trig, now, st, ctx)
 
@@ -567,6 +567,28 @@ return $input.all().filter(i => i.json.id).map(i => ({{ json: {{ booking_id: i.j
               body="={{ JSON.stringify({ thanks_sent_at: new Date().toISOString() }) }}", prefer="return=minimal")
     w.chain(ctx, close, qc, cc, tc)
     w.link(tc, mc, 0)
+
+    # F: proactive follow-up. A guest due today who has not checked in by 18:00 (and still on Telegram) is asked once, until 22:59,
+    # whether they are running late. Their reply goes through the normal bot: an arrival time is passed to staff (see the bot prompt).
+    gf = if_node(w, "Evening check? (18:00 to 22:59)", "={{ $json.hour >= $json.ARRIVAL_CHECK_HOUR && $json.hour <= $json.ARRIVAL_CHECK_LAST_HOUR }}", "boolean", "true", (900, 1500))
+    qf = http(w, "Due today, not checked in", "GET",
+              "=" + SB + "/bookings?status=eq.booked&check_in=eq.{{ $json.today }}&checked_in_at=is.null&arrival_check_sent_at=is.null"
+              "&select=id,guests!inner(name,telegram_chat_id)&guests.telegram_chat_id=not.is.null", (1120, 1500), always=True)
+    cf = code(w, "Compose arrival checks", f"""
+const s = $('Context').first().json.settings;
+return $input.all().filter(i => i.json.id).map(i => ({{ json: {{ booking_id: i.json.id, chat_id: i.json.guests.telegram_chat_id,
+  text: `Good evening ${{i.json.guests.name}}! 🌙 We are looking forward to welcoming you to {HOTEL_NAME} today.\\n\\n` +
+    `If you will be arriving late, just reply with roughly what time and I will let our team know. ` +
+    `When you arrive, tap Check in below to get your private stay code.` }} }}));
+""", (1340, 1500))
+    tf = tg_send(w, "Ask expected guest about arrival", "={{ $json.chat_id }}", "={{ $json.text }}", (1560, 1500),
+                 button=("Check in", "=checkin:{{ $json.booking_id }}"), onError="continueErrorOutput")
+    mf = http(w, "Mark arrival check sent", "PATCH", "=" + SB + "/bookings?id=eq.{{ $('Compose arrival checks').item.json.booking_id }}", (1780, 1500),
+              body="={{ JSON.stringify({ arrival_check_sent_at: new Date().toISOString() }) }}", prefer="return=minimal")
+    w.chain(ctx, gf)
+    w.link(gf, qf, 0)
+    w.chain(qf, cf, tf)
+    w.link(tf, mf, 0)
 
     # D: service recovery, part 1. A request, complaint or emergency that is still open goes back to the staff group:
     # every 30 minutes (every 10 for an emergency), at most 3 times, and the last one says to tell the duty manager.
