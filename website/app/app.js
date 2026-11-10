@@ -162,7 +162,52 @@
     const LEGEND = { in: 'In house', arr: 'Arriving, not yet in', done: 'Checked out and thanked', ph: 'Booked by phone, not on Telegram yet' };
     $('#tlLegend').replaceChildren(...['in', 'arr', 'done', 'ph'].filter((k) => used.has(k)).map((k) => h('span', {}, h('i', { class: 'tl-sw k-' + k }), LEGEND[k])));
   };
+  /* ---------- ASK ALEJO: quick answers computed here from the data on screen, free questions go to the copilot (signed in only) ---------- */
+  const setupAsk = () => {
+    const form = $('#askForm'); if (!form) return;
+    const input = $('#askQ'), out = $('#askOut'), go = $('#askGo'), note = $('#askNote');
+    const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    const show = (lines, cls) => { out.hidden = false; out.className = 'answer' + (cls ? ' ' + cls : ''); out.replaceChildren(...lines.map((l) => h('p', { class: /:$/.test(l) ? 'a-h' : '', text: l }))); };
+    const person = (b) => `${b.guest}, ${b.type} ${b.room}, ${b.linked === false && b.stage === 0 ? 'not on Telegram yet' : FD.STAGE_WORD[b.stage].toLowerCase()}`;
+    const itemLine = (c) => `• ${c.guest}, ${SERVICE(c) ? KIND_WORD(c).toLowerCase() : 'question'}, ${c.ago}${late(c) ? ', late' : ''}${SERVICE(c) ? ', ' + (c.owner ? 'owner ' + c.owner : 'nobody has taken it') : ''}`;
+    const urgent = () => needs().sort((a, b) => (a.kind === 'emergency' ? 0 : SERVICE(a) ? 1 : 2) - (b.kind === 'emergency' ? 0 : SERVICE(b) ? 1 : 2) || waitMins(b) - waitMins(a));
+    const nextDay = () => new Date((FD.day(FD.NOW.date) + 1) * 86400000).toISOString().slice(0, 10);
+    const A = {
+      arrivals: () => {
+        const t = FD.bookings.filter((b) => b.in === FD.NOW.date && b.stage < 4), n = FD.bookings.filter((b) => b.in === nextDay());
+        return [`Arriving today (${t.length}):`, ...(t.length ? t.map((b) => '• ' + person(b)) : ['Nobody arrives today.']), `Arriving tomorrow (${n.length}):`, ...(n.length ? n.map((b) => '• ' + person(b)) : ['Nobody arrives tomorrow.'])];
+      },
+      pending: () => { const l = urgent(); return [`Waiting on staff (${l.length}):`, ...(l.length ? l.map(itemLine) : ['Nothing is waiting. Alejo has it.'])]; },
+      handover: () => {
+        const l = urgent(), t = FD.bookings.filter((b) => b.in === FD.NOW.date && b.stage < 4), out2 = FD.bookings.filter((b) => b.out === FD.NOW.date && b.stage < 4), inh = FD.bookings.filter((b) => b.stage >= 2 && b.stage < 4);
+        const wk = FD.conversations.filter((c) => !c.last || Date.now() - new Date(c.last).getTime() < 7 * 864e5), asked = wk.filter((c) => c.msgs.some((m) => m.r === 'guest')), done = asked.filter((c) => statusOf(c) !== 'needs').length;
+        const svc = wk.filter(SERVICE), onTime = svc.filter((c) => c.resolvedIn > 0 && c.resolvedIn <= TARGET(c)).length, scored = onTime + svc.filter((c) => c.resolvedIn > TARGET(c)).length + svc.filter(late).length;
+        const ghost = FD.bookings.filter((b) => b.linked === false && b.stage < 2 && FD.day(b.in) - FD.day(FD.NOW.date) <= 2 && FD.day(b.in) >= FD.day(FD.NOW.date));
+        return [`Shift handover, ${FD.NOW.label}`,
+          `Still open (${l.length}):`, ...(l.length ? l.map(itemLine) : ['Nothing. Every guest question is settled.']),
+          'At the desk:', `• In house: ${inh.length}. Arriving today: ${t.length}${t.length ? ' (' + t.map((b) => b.guest).join(', ') + ')' : ''}. Leaving today: ${out2.length}${out2.length ? ' (' + out2.map((b) => b.guest).join(', ') + ')' : ''}.`,
+          ...(ghost.length ? [`• ${plural(ghost.length, 'guest arrives', 'guests arrive')} within 2 days without Telegram: ${ghost.map((b) => b.guest).join(', ')}. They get no reminders until they share their number with the bot.`] : []),
+          'This week:', `• ${done} of ${asked.length} guest questions settled${scored ? '; ' + onTime + ' of ' + scored + ' requests handled within target' : ''}.`];
+      },
+    };
+    const CHIPS = [['arrivals', 'Who arrives today?'], ['pending', 'What is pending?'], ['handover', 'Shift handover']];
+    const run = (key) => show(A[key]());
+    $('#askChips').replaceChildren(...CHIPS.map(([k, label]) => h('button', { class: 'achip', type: 'button', onclick: () => { input.value = label; run(k); } }, label)));
+    note.textContent = LIVE ? 'Quick answers come from your screen; anything else is answered by the assistant from your live records.' : 'Sample data. Sign in to ask anything in your own words.';
+    const route = (q) => { if (q.split(/\s+/).length > 7) return null; const s = q.toLowerCase(); return /handover|hand over|summar|shift|tonight/.test(s) ? 'handover' : /arriv|check.?in|coming today/.test(s) ? 'arrivals' : /pending|open|waiting|late|overdue|owner|outstanding/.test(s) ? 'pending' : null; };
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const q = input.value.trim(); if (!q) { input.focus(); return; }
+      const key = route(q);
+      if (key) { run(key); return; }
+      if (!LIVE) { show(['In the sample, try one of the quick questions above. Signed in, you can ask anything about your guests, arrivals and open items.'], 'wait'); return; }
+      go.disabled = true; show(['Looking at your records…'], 'wait');
+      try { show(String(await window.Alejo.ask(q)).split('\n').filter(Boolean)); } catch (err) { show([err.message]); } finally { go.disabled = false; }
+    });
+  };
+
   if (page === 'overview') {
+    setupAsk();
     renderOverview(); onData(renderOverview);
     let lastN = innerWidth < 600 ? 6 : innerWidth < 1000 ? 8 : 10;
     addEventListener('resize', () => { const n = innerWidth < 600 ? 6 : innerWidth < 1000 ? 8 : 10; if (n !== lastN) { lastN = n; renderOverview(); } });

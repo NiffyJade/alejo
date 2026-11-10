@@ -38,6 +38,12 @@
     <div class="actions"><a class="btn" id="ovCta" href="/app/inbox.html">Reply to guests</a></div>
   </div>
   <div class="kpis" id="ovKpis" role="group" aria-label="Today in numbers"></div>
+  <section class="ask" aria-labelledby="h-ask">
+    <div class="blk-h"><h2 id="h-ask">Ask Alejo</h2><span id="askNote"></span></div>
+    <form class="askform" id="askForm" autocomplete="off"><label class="sr" for="askQ">Ask a question about today</label><input id="askQ" name="q" type="text" maxlength="300" placeholder="Who arrives today? What is pending?"><button class="btn" type="submit" id="askGo">Ask</button></form>
+    <div class="achips" id="askChips" role="group" aria-label="Quick questions"></div>
+    <div class="answer" id="askOut" role="status" aria-live="polite" hidden></div>
+  </section>
   <div class="ov-grid">
     <section aria-labelledby="h-needs"><div class="blk-h"><h2 id="h-needs">Needs you</h2><a href="/app/inbox.html">Open inbox</a></div><div id="ovNeeds"></div></section>
     <section aria-labelledby="h-move"><div class="blk-h"><h2 id="h-move">At the desk today</h2><a href="/app/bookings.html">All stays</a></div><div id="ovMove"></div></section>
