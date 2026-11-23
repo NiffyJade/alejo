@@ -82,7 +82,7 @@
       const nights = dayNum(b.check_out) - dayNum(b.check_in);
       const pays = paidBy[b.id] || [];
       return { id: b.id, ref: b.id.slice(0, 8).toUpperCase(), code: String(b.stay_code || ''), guest: g.name, guestId: g.id, room: b.room_number || 'not assigned', type: b.room_type || 'Room', in: b.check_in, out: b.check_out,
-        created: b.created_at, src: SRC[b.source] || (g.telegram_chat_id ? 'Telegram' : 'Phone'), source: b.source || '', status: b.status, roomNo: b.room_number || '',
+        created: b.created_at, src: SRC[b.source] || (g.telegram_chat_id ? 'Telegram' : 'Phone'), source: b.source || '', status: b.status, rating: b.rating || null, roomNo: b.room_number || '',
         payments: pays, paid: pays.reduce((s, p) => s + p.amount, 0), stage, note: when[0] + ' ' + stamp(when[1]), linked: !!g.telegram_chat_id, hue: hue(g.name), nights, total: nights * (RATES[b.room_type] || 0) };
     });
     const byGuest = {};
@@ -202,6 +202,7 @@
     take: (ids, name) => rest('escalations?id=in.(' + ids.join(',') + ')&status=eq.open', { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ assigned_to: name, assigned_at: name ? new Date().toISOString() : null }) }),   // name = null releases it
     clock: () => clock(new Date()),
     manage,
+    ratings: (days) => rest('rpc/ratings_report', { method: 'POST', body: JSON.stringify({ p_days: days }) }),
     report: (days) => rest('rpc/enquiry_report', { method: 'POST', body: JSON.stringify({ p_days: days }) }),
     async ask(question) {                                           // the staff copilot: answers from the hotel's live records (edge function staff-copilot)
       const t = await token();

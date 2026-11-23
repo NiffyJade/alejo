@@ -124,7 +124,7 @@
     const kv = h('dl', { class: 'mkv' },
       [['Reference', b.ref], ['Status', STATUS[b.status] || b.status], ['Room', `${b.type}${b.roomNo ? ', room ' + b.roomNo : ', room not assigned'}`],
         ['Stay', `${FD.fmtDay(b.in)} to ${FD.fmtDay(b.out)} (${plural(b.nights, 'night', 'nights')})`], ['Source', b.src],
-        ['Total', FD.naira(b.total)], ['Paid', FD.naira(b.paid || 0)], ['Balance', balance > 0 ? FD.naira(balance) : 'None']]
+        ['Total', FD.naira(b.total)], ['Paid', FD.naira(b.paid || 0)], ['Balance', balance > 0 ? FD.naira(balance) : 'None']].concat(b.rating ? [['Guest rating', b.rating + ' out of 5']] : [])
         .flatMap(([k, v]) => [h('dt', { text: k }), h('dd', { text: v })]));
 
     // room number

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ratings · Alejo staff dashboard</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f3f5fa">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://api.fontshare.com">
+<link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body data-page="ratings">
+<a class="skip" href="#main">Skip to content</a>
+<div class="app">
+<aside class="side" id="side" aria-label="Dashboard">
+  <a class="brand" href="/app/index.html" aria-label="Alejo, today"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0z" fill="#111"/><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="#111"/><circle cx="12" cy="6.2" r="2" fill="#1a4be0"/></svg><span class="brand-t"><b translate="no">Alejo</b></span></a>
+  <div class="scope"><b>BrightSide Hotel</b><span>Lagos, Nigeria</span></div>
+  <nav class="nav" aria-label="Pages"><a href="/app/index.html">Today</a><a href="/app/inbox.html">Inbox <i class="cnt" id="needCount" role="img" aria-label="guests need you">3</i></a><a href="/app/enquiries.html">Enquiries</a><a href="/app/ratings.html" aria-current="page">Ratings</a><a href="/app/bookings.html">Bookings</a><p class="nav-h">Your hotel</p><a href="/app/knowledge.html">Facts</a><a href="/app/settings.html">Settings</a></nav>
+  <div class="side-foot">
+    <div class="links"><a class="web-link" href="/">Website</a><span id="authSlot"></span></div>
+    <div class="me"><span class="acct" id="acct" title="Amaka Okafor, front desk">AO</span><span><b id="meName">Amaka Okafor</b><small id="meRole">Front desk, nights</small></span></div>
+  </div>
+</aside>
+<div class="scrim" id="scrim"></div>
+<div class="frame-main">
+  <header class="top">
+    <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="side">Menu</button>
+    <span class="top-name" translate="no">Alejo</span>
+    <div class="search"><label class="sr" for="q">Search</label><input id="q" name="q" type="search" placeholder="Search stays…" autocomplete="off" spellcheck="false"><kbd aria-hidden="true">/</kbd></div>
+    <span class="demo-note" id="demoNote">Sample data, Tue 27 Oct, 02:31</span>
+  </header>
+<main class="sheet" id="main">
+  <div class="title-row">
+    <div><h1>Ratings</h1><p class="sub">How guests rated their stay after checking out.</p></div>
+    <div class="actions" role="group" aria-label="Period"><button class="btn line" type="button" data-days="7" aria-pressed="true">Last 7 days</button><button class="btn line" type="button" data-days="30" aria-pressed="false">Last 30 days</button><button class="btn line" type="button" data-days="90" aria-pressed="false">Last 90 days</button></div>
+  </div>
+  <p class="foot-note" id="rtnote" role="status"></p>
+  <p class="merr" id="rterr" role="alert"></p>
+  <div class="sum" id="rtkpis" aria-label="Summary"></div>
+  <section class="eqsec" aria-labelledby="h-dist">
+    <h2 id="h-dist">How the scores are spread</h2>
+    <div class="funnel" id="rtdist"></div>
+  </section>
+  <section class="eqsec" id="rtroomsec" aria-labelledby="h-rooms" hidden>
+    <h2 id="h-rooms">By room type</h2>
+    <div id="rtrooms"></div>
+  </section>
+  <section class="eqsec" aria-labelledby="h-low">
+    <h2 id="h-low">Needs attention</h2>
+    <p class="hint">Scores of 3 or lower. Each one opened a complaint in the Inbox and alerted the staff group.</p>
+    <div class="tbl" role="table" aria-label="Low scores">
+      <div class="th cols-r" role="row"><div>Guest</div><div>Score</div><div>Rated</div><div>Status</div></div>
+      <div id="rtlow"></div>
+    </div>
+  </section>
+  <p class="foot-note">Guests on Telegram are asked about 30 minutes after they check out, with five buttons from 1 to 5; they can tap again to change their score for 14 days. The public review link goes to every guest, not only to those who score highly. Guests who booked by phone and never joined Telegram are not asked. Every Monday from 09:00 the staff group gets last week's ratings.</p>
+</main>
+</div>
+</div>
+
+<script src="/app/data.js"></script>
+<script src="/app/live.js"></script>
+<script src="/app/app.js"></script>
+<script src="/app/ratings.js"></script>
+</body>
+</html>

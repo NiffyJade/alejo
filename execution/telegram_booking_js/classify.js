@@ -12,6 +12,10 @@ if (u.callback_query) {
       out = raw.startsWith('fuyes')
         ? { type: 'booking_cb', query_id: q.id, chat_id: q.message.chat.id, action: 'bkcont', payload: '', text: 'Yes, I would like to continue my booking.', from_name: who }
         : { type: 'booking_cb', query_id: q.id, chat_id: q.message.chat.id, action: 'bkno', payload: '' };
+  } else if (/^rate:[1-5]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
+    // the 1-5 buttons under the thank-you after checkout
+    if (q.message && q.message.chat.type === 'private')
+      out = { type: 'rating', query_id: q.id, chat_id: q.message.chat.id, rating: Number(raw[5]), booking_id: raw.slice(7).toLowerCase() };
   } else if (/^bk(ok|no):/.test(raw)) {
     // Confirm / Cancel under a booking summary; the payload names the dates and room type that were summarised
     if (q.message && q.message.chat.type === 'private')

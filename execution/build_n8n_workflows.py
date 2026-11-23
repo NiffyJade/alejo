@@ -215,7 +215,7 @@ def telegram_bot():
     w.link(trig, cls)
 
     rules = []
-    for t in ("start", "callback", "staff_reply", "guest_message", "contact", "booking_cb", "hello", "menu", "mybooking"):
+    for t in ("start", "callback", "staff_reply", "guest_message", "contact", "booking_cb", "hello", "menu", "mybooking", "rating"):
         rules.append({"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 3},
                                      "conditions": [cond("={{ $json.type }}", "string", "equals", t)], "combinator": "and"},
                       "renameOutput": True, "outputKey": t})
@@ -399,6 +399,28 @@ def telegram_bot():
     w.link(haveb, my_send, 0)
     w.link(haveb, my_phone, 1)
 
+    # ---- RATING: the 1-5 buttons under the thank-you after checkout. record_rating (database) stores it and, for 3 or less, opens ONE
+    # complaint item for the stay; the guest is answered first, then staff are alerted and the alert's message id is saved on the item so
+    # a reply in the staff group reaches the guest. If the guest's reply cannot be delivered the alert still goes out.
+    ack_r = w.add("Acknowledge rating tap", "n8n-nodes-base.telegram",
+                  {"resource": "callback", "operation": "answerQuery", "queryId": "={{ $json.query_id }}", "additionalFields": {}},
+                  (700, 2300), ver=1.2, creds=C["tg"], onError="continueRegularOutput")
+    rec = http(w, "Record rating", "POST", "=" + SB + "/rpc/record_rating", (920, 2300),
+               body="={{ JSON.stringify({ p_booking_id: $('Classify').first().json.booking_id, p_chat_id: $('Classify').first().json.chat_id, "
+                    "p_rating: $('Classify').first().json.rating }) }}", always=True, onError="continueRegularOutput")
+    rrep = code(w, "Rating reply", booking_js("rating_reply.js"), (1140, 2300))
+    rsend = tg_send(w, "Send rating reply", "={{ $('Classify').first().json.chat_id }}", "={{ $('Rating reply').first().json.text }}", (1360, 2300),
+                    menu=True, onError="continueRegularOutput")
+    ralert_if = if_node(w, "Low score to alert?", "={{ $('Rating reply').first().json.alert }}", "string", "notEmpty", (1580, 2300))
+    ralert = tg_send(w, "Alert staff (low rating)", str(STAFF_CHAT_ID), "={{ $('Rating reply').first().json.alert }}", (1800, 2240), onError="continueRegularOutput")
+    rpatch = http(w, "Save alert message id", "PATCH", "=" + SB + "/escalations?id=eq.{{ $('Rating reply').first().json.escalation_id }}", (2020, 2240),
+                  body="={{ JSON.stringify({ staff_message_id: $json.result ? $json.result.message_id : $json.message_id }) }}",
+                  prefer="return=minimal", onError="continueRegularOutput")
+    w.link(sw, ack_r, 9)
+    w.chain(ack_r, rec, rrep, rsend, ralert_if)
+    w.link(ralert_if, ralert, 0)
+    w.link(ralert, rpatch)
+
     # ---- STAFF REPLY: forward to guest, mark answered, optionally learn
     fe = http(w, "Find open escalation", "GET",
               "=" + SB + "/escalations?staff_message_id=eq.{{ $json.reply_to }}&status=eq.open&select=id,guest_chat_id,question",
@@ -514,7 +536,7 @@ def scheduler():
 const now = new Date(), lagos = new Date(now.getTime() + 3600 * 1000);
 const iso = d => d.toISOString().slice(0, 10);
 return [{ json: { now: now.toISOString(), today: iso(lagos), tomorrow: iso(new Date(lagos.getTime() + 86400000)),
-  hour: lagos.getUTCHours(), cutoff: new Date(now.getTime() - 30 * 60000).toISOString(),
+  hour: lagos.getUTCHours(), weekday: lagos.getUTCDay(), cutoff: new Date(now.getTime() - 30 * 60000).toISOString(),
   followBefore: new Date(now.getTime() - 90 * 60000).toISOString(), followAfter: new Date(now.getTime() - 5 * 3600000).toISOString() } }];
 """, (220, 300))
     st = http(w, "Get settings", "GET", "=" + SB + "/hotel_settings?select=key,value", (440, 300))
@@ -573,16 +595,18 @@ return $input.all().filter(i => i.json.id).map(i => ({ json: { booking_id: i.jso
     qc = http(w, "Guests to thank", "GET",
               "=" + SB + "/bookings?status=eq.checked_out&thanks_sent_at=is.null&checked_out_at=lt.{{ $('Context').first().json.cutoff }}"
               "&select=id,guests!inner(name,telegram_chat_id)&guests.telegram_chat_id=not.is.null", (1120, 600), always=True)
-    cc = code(w, "Compose thank-yous", f"""
-const s = $('Context').first().json.settings;
-return $input.all().filter(i => i.json.id).map(i => ({{ json: {{ booking_id: i.json.id, chat_id: i.json.guests.telegram_chat_id,
-  text: `Thank you for staying with us, ${{i.json.guests.name}}! 🙏 We hope you had a wonderful time at {HOTEL_NAME}.` +
-    (s.REVIEW_LINK ? `\\n\\nIf you have a moment, we'd love your feedback: ${{s.REVIEW_LINK}}` : '') +
-    `\\n\\nSafe travels, and we hope to see you again soon!` }} }}));
-""", (1340, 600))
-    tc = tg_send(w, "Send thank-you", "={{ $json.chat_id }}", "={{ $json.text }}", (1560, 600), onError="continueErrorOutput")
+    cc = code(w, "Compose thank-yous", booking_js("thanks_compose.js"), (1340, 600))
+    # The thank-you now carries five rating buttons (1 to 5). Taps are handled by the guest bot (route "rating"); a score of 3 or less
+    # becomes a complaint item. The public review link stays in the text for EVERYONE (sending only happy guests to a review site is
+    # "review gating", which Google forbids).
+    tc = w.add("Send thank-you", "n8n-nodes-base.telegram", {
+        "resource": "message", "operation": "sendMessage", "chatId": "={{ $json.chat_id }}", "text": plain("={{ $json.text }}"),
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {"rows": [{"row": {"buttons": [
+            {"text": f"⭐ {k}", "additionalFields": {"callback_data": "=rate:" + str(k) + ":{{ $json.booking_id }}"}} for k in range(1, 6)]}}]},
+        "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}, (1560, 600), ver=1.2, creds=C["tg"], onError="continueErrorOutput")
     mc = http(w, "Mark thank-you sent", "PATCH", "=" + SB + "/bookings?id=eq.{{ $('Compose thank-yous').item.json.booking_id }}", (1780, 600),
-              body="={{ JSON.stringify({ thanks_sent_at: new Date().toISOString() }) }}", prefer="return=minimal")
+              body="={{ JSON.stringify({ thanks_sent_at: new Date().toISOString(), rating_prompted_at: new Date().toISOString() }) }}", prefer="return=minimal")
     w.chain(ctx, close, qc, cc, tc)
     w.link(tc, mc, 0)
 
@@ -639,6 +663,26 @@ return $input.all().filter(i => i.json.id).map(i => ({{ json: {{ booking_id: i.j
     w.link(gg, qg, 0)
     w.chain(qg, cg, tg_follow, mg, dg)
     w.link(dg, lg, 0)
+
+    # H: weekly ratings summary. On Monday, from 09:00 Lagos time, the staff group gets last week's ratings (average, spread, low scores).
+    # Nothing is sent when nobody rated a stay. RATINGS_DIGEST_LAST (a setting) holds the date it last ran, so it runs once per Monday.
+    gh = if_node(w, "Ratings summary due? (Monday, from 09:00)",
+                 "={{ $json.weekday === 1 && $json.hour >= 9 && String($json.settings.RATINGS_DIGEST_LAST || '') !== $json.today }}",
+                 "boolean", "true", (900, 2400))
+    rh = http(w, "Ratings of the last 7 days", "POST", "=" + SB + "/rpc/ratings_summary", (1120, 2400),
+              body="={{ JSON.stringify({ p_days: 7 }) }}", always=True)
+    ch = code(w, "Compose ratings summary", booking_js("digest_compose.js"), (1340, 2400))
+    sh = if_node(w, "Anything to send?", "={{ $json.send }}", "boolean", "true", (1560, 2340))
+    th = tg_send(w, "Send ratings summary", str(STAFF_CHAT_ID), "={{ $('Compose ratings summary').first().json.text }}", (1780, 2300),
+                 onError="continueRegularOutput")
+    mh = http(w, "Mark ratings summary done", "POST", "=" + SB + "/hotel_settings?on_conflict=key", (1560, 2460),
+              prefer="resolution=merge-duplicates,return=minimal",
+              body="={{ JSON.stringify({ key: 'RATINGS_DIGEST_LAST', value: $('Context').first().json.today, updated_at: new Date().toISOString() }) }}")
+    w.chain(ctx, gh)
+    w.link(gh, rh, 0)
+    w.chain(rh, ch, sh)
+    w.link(sh, th, 0)
+    w.link(ch, mh)
 
     # D: service recovery, part 1. A request, complaint or emergency that is still open goes back to the staff group:
     # every 30 minutes (every 10 for an emergency), at most 3 times, and the last one says to tell the duty manager.
