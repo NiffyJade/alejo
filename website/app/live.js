@@ -38,16 +38,18 @@
   };
 
   const fetchRows = async () => {
-    const [guests, bookings, escalations, messages, rooms, kb, settings] = await Promise.all([
+    const [guests, bookings, escalations, messages, rooms, kb, settings, payments, blocks] = await Promise.all([
       rest('guests?select=id,name,phone,telegram_chat_id&limit=1000'),
       rest('bookings?select=*&order=check_in.desc&limit=1000'),
       rest('escalations?select=*&order=created_at.desc&limit=500'),
       rest('messages?select=guest_id,direction,text,created_at&order=created_at.desc&limit=1000'),
-      rest('room_types?select=name,nightly_rate'),
+      rest('room_types?select=name,nightly_rate,total_rooms,active'),
       rest('knowledge_entries?select=id,category,question,answer,source&limit=1000'),
       rest('hotel_settings?select=key,value&limit=500'),
+      rest('booking_payments?select=id,booking_id,amount,method,note,created_at&order=created_at.asc&limit=5000'),
+      rest('room_blocks?select=*&order=start_date.asc&limit=500'),
     ]);
-    return { guests, bookings, escalations, messages, rooms, kb, settings };
+    return { guests, bookings, escalations, messages, rooms, kb, settings, payments, blocks };
   };
 
   /* ---------- Lagos time ---------- */
@@ -68,14 +70,20 @@
     const RATES = Object.fromEntries(rows.rooms.map((r) => [r.name, Number(r.nightly_rate) || 0]));
     const guests = Object.fromEntries(rows.guests.map((g) => [g.id, g]));
 
+    const SRC = { telegram: 'Telegram', phone: 'Phone', 'walk-in': 'Walk-in', online: 'Online', other: 'Other' };
+    const HOW = (b) => ({ 'walk-in': 'at the desk', online: 'online', other: 'by staff' }[b.source] || 'by phone');
+    const paidBy = {};
+    (rows.payments || []).forEach((p) => { (paidBy[p.booking_id] = paidBy[p.booking_id] || []).push({ id: p.id, amount: Number(p.amount), method: p.method || '', note: p.note || '', at: p.created_at }); });
     const bookings = rows.bookings.filter((b) => b.status !== 'cancelled' && guests[b.guest_id]).map((b) => {
       const g = guests[b.guest_id];
       // 4 = checked out (guest tapped Check out, or the scheduler closed the stay); 5 = thanked. A checked-out guest is no longer in house.
       const stage = b.thanks_sent_at ? 5 : b.status === 'checked_out' ? 4 : b.checkout_reminder_sent_at ? 3 : b.checked_in_at ? 2 : b.reminder_sent_at ? 1 : 0;
       const when = [b.thanks_sent_at && ['Thank-you sent', b.thanks_sent_at], b.status === 'checked_out' && ['Checked out', b.checked_out_at || b.created_at], b.checkout_reminder_sent_at && ['Checkout reminder', b.checkout_reminder_sent_at], b.checked_in_at && ['Checked in', b.checked_in_at], b.reminder_sent_at && ['Reminder sent', b.reminder_sent_at], ['Booked', b.created_at]].find(Boolean);
       const nights = dayNum(b.check_out) - dayNum(b.check_in);
+      const pays = paidBy[b.id] || [];
       return { id: b.id, ref: b.id.slice(0, 8).toUpperCase(), code: String(b.stay_code || ''), guest: g.name, guestId: g.id, room: b.room_number || 'not assigned', type: b.room_type || 'Room', in: b.check_in, out: b.check_out,
-        created: b.created_at, src: g.telegram_chat_id ? 'Telegram' : 'Phone', stage, note: when[0] + ' ' + stamp(when[1]), linked: !!g.telegram_chat_id, hue: hue(g.name), nights, total: nights * (RATES[b.room_type] || 0) };
+        created: b.created_at, src: SRC[b.source] || (g.telegram_chat_id ? 'Telegram' : 'Phone'), source: b.source || '', status: b.status, roomNo: b.room_number || '',
+        payments: pays, paid: pays.reduce((s, p) => s + p.amount, 0), stage, note: when[0] + ' ' + stamp(when[1]), linked: !!g.telegram_chat_id, hue: hue(g.name), nights, total: nights * (RATES[b.room_type] || 0) };
     });
     const byGuest = {};
     bookings.forEach((b) => { if (!byGuest[b.guest] || b.in > byGuest[b.guest].in) byGuest[b.guest] = b; });
@@ -122,17 +130,57 @@
         last: at });
     });
     bookings.filter((b) => !b.linked && !byG[b.guestId] && b.stage < 4).forEach((b) => conversations.push({ id: b.guestId, guest: b.guest, ch: 'Phone', ago: ago(b.created || new Date().toISOString()), unread: false, status: 'waiting',
-      topic: 'Booked by phone, not on Telegram yet', lang: '', suggest: '', why: '', escId: null, escIds: [],
-      msgs: [{ r: 'note', t: '', x: 'Booked by phone. Reference ' + b.ref + '. Waiting for the guest to open Telegram and share their number.' }], last: '1970-01-01' }));
+      topic: 'Booked ' + HOW(b) + ', not on Telegram yet', lang: '', suggest: '', why: '', escId: null, escIds: [],
+      msgs: [{ r: 'note', t: '', x: 'Booked ' + HOW(b) + '. Reference ' + b.ref + '. Waiting for the guest to open Telegram and share their number.' }], last: '1970-01-01' }));
     conversations.sort((a, b) => (b.status === 'needs') - (a.status === 'needs') || new Date(b.last) - new Date(a.last));
     conversations.forEach((c) => { if (!byGuest[c.guest]) byGuest[c.guest] = fallback(c.guest); });
 
     const settings = Object.fromEntries(rows.settings.filter((s) => s.value).map((s) => [s.key, s.value]));
     const kb = rows.kb.map((e) => ({ id: e.id, c: e.category, q: e.question, a: e.answer, k: KEYS(e.answer), s: e.source === 'staff' ? 'staff' : 'seed' }));
 
-    Object.assign(FD, { NOW: nowInfo(), RATES, bookings, byGuest, conversations, staff: [] });
+    Object.assign(FD, { NOW: nowInfo(), RATES, bookings, byGuest, conversations, staff: [],
+      roomTypes: rows.rooms.filter((r) => r.active !== false).map((r) => ({ name: r.name, rate: Number(r.nightly_rate) || 0, total: r.total_rooms })),
+      blocks: (rows.blocks || []).map((k) => ({ id: k.id, type: k.room_type, rooms: k.rooms, start: k.start_date, end: k.end_date, reason: k.reason || '' })) });
     window.FD_KB = kb;
     window.FD_FACTS = settings;
+  };
+
+  /* ---------- managing bookings: every change is a database function that checks availability and that the caller is staff ---------- */
+  const REASONS = {
+    name: () => "Enter the guest's name.",
+    dates: () => 'Check the dates: check-out must be after check-in, check-in cannot be in the past, and a stay can be at most 90 nights (a block, 365).',
+    room_type: () => 'Choose a room type.',
+    sold_out: (r) => 'No ' + (r.room_type || '') + ' rooms are free for those dates.',
+    room_taken: () => 'That room number is already used by another stay on those dates.',
+    amount: () => 'Enter a valid amount.',
+    not_today: () => 'A guest can only be checked in now when they arrive today.',
+    already: () => 'This booking is already cancelled.',
+    in_house: () => 'This guest is checked in. Check them out instead of cancelling.',
+    done: () => 'This stay is already finished.',
+    not_found: () => 'That record no longer exists. Refresh the page.',
+    not_booked: () => 'This booking is not waiting to check in.',
+    not_in_house: () => 'This guest is not checked in.',
+    closed: () => 'This booking is closed, so its room cannot change.',
+    rooms: () => 'The number of rooms must be between 1 and the number the hotel has of that type.',
+    conflict: (r) => 'Only ' + r.free + ' ' + (r.room_type || '') + ' room' + (r.free === 1 ? ' is' : 's are') + ' free for those dates. Existing bookings already use the rest.',
+  };
+  const call = async (fn, args) => {
+    let r;
+    try { r = await rest('rpc/' + fn, { method: 'POST', body: JSON.stringify(args) }); }
+    catch (e) { throw new Error(/not allowed/i.test(e.message) ? 'Your account is not allowed to do this.' : e.message); }
+    if (r && r.ok === false) { const e = new Error((REASONS[r.reason] || (() => 'That could not be done.'))(r)); e.reason = r.reason; throw e; }
+    return r;
+  };
+  const manage = {
+    availability: (ci, co) => rest('rpc/staff_availability', { method: 'POST', body: JSON.stringify({ p_check_in: ci, p_check_out: co }) }),
+    create: (a) => call('staff_create_booking', { p_name: a.name, p_phone: a.phone || null, p_room_type: a.type, p_check_in: a.ci, p_check_out: a.co, p_source: a.source,
+      p_room_number: a.room || null, p_check_in_now: !!a.checkInNow, p_paid: a.paid || 0, p_payment_method: a.method || null }),
+    cancel: (id, reason) => call('staff_cancel_booking', { p_id: id, p_reason: reason || null }),
+    status: (id, action) => call('staff_set_status', { p_id: id, p_action: action }),
+    room: (id, room) => call('staff_set_room', { p_id: id, p_room: room }),
+    pay: (id, amount, method, note) => call('staff_record_payment', { p_id: id, p_amount: amount, p_method: method || null, p_note: note || null }),
+    block: (a) => call('staff_add_block', { p_room_type: a.type, p_rooms: a.rooms, p_start: a.start, p_end: a.end, p_reason: a.reason || null }),
+    unblock: (id) => call('staff_remove_block', { p_id: id }),
   };
 
   /* ---------- the public object app.js uses ---------- */
@@ -153,6 +201,7 @@
     addAnswer: (q, a) => rest('knowledge_entries', { method: 'POST', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ id: 'staff-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())), category: 'staff', question: q, answer: a, source: 'staff' }) }),
     take: (ids, name) => rest('escalations?id=in.(' + ids.join(',') + ')&status=eq.open', { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ assigned_to: name, assigned_at: name ? new Date().toISOString() : null }) }),   // name = null releases it
     clock: () => clock(new Date()),
+    manage,
     async ask(question) {                                           // the staff copilot: answers from the hotel's live records (edge function staff-copilot)
       const t = await token();
       const r = await fetch(SB + '/functions/v1/staff-copilot', { method: 'POST', headers: { apikey: ANON, authorization: 'Bearer ' + t, 'content-type': 'application/json' }, body: JSON.stringify({ question }) });
@@ -189,7 +238,7 @@
   Alejo.refresh = doRefresh;
   const scheduleRefresh = () => { clearTimeout(timer); timer = setTimeout(doRefresh, 400); };     // several changes at once become one refresh
 
-  const TABLES = ['messages', 'escalations', 'bookings', 'guests', 'knowledge_entries', 'hotel_settings'];
+  const TABLES = ['messages', 'escalations', 'bookings', 'guests', 'knowledge_entries', 'hotel_settings', 'booking_payments', 'room_blocks'];
   const onChange = (table, p) => {
     if (table === 'escalations' && p.eventType === 'INSERT') emit('alejo:new', { text: 'A guest needs you: ' + String((p.new || {}).question || '').slice(0, 80) });
     if (table === 'bookings' && p.eventType === 'INSERT') emit('alejo:new', { text: 'New booking received.' });

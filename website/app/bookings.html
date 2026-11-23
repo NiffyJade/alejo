@@ -35,7 +35,7 @@
 <main class="sheet" id="main">
   <div class="title-row">
     <div><h1>Bookings</h1><p class="sub">Every stay, from booking to thank-you.</p></div>
-    <div class="actions"><button class="btn line" type="button" id="bexport">Export CSV</button></div>
+    <div class="actions"><button class="btn" type="button" id="bnew" hidden>New booking</button><button class="btn line" type="button" id="bexport">Export CSV</button></div>
   </div>
   <section class="verify" aria-labelledby="h-verify">
     <div><h2 id="h-verify">Verify a guest</h2><p>Ask the guest for their private stay code, then type it here to see whose stay it belongs to. Use it before handing over a key, charging a room or sharing booking details.</p></div>
@@ -52,13 +52,20 @@
     <div class="th cols-b" role="row"><div>Guest</div><div>Room</div><div>Dates</div><div>Stay journey</div><div>Source</div><div class="num">Total</div></div>
     <div id="bbody"></div>
   </div>
+  <section class="blocks" id="blocksSec" aria-labelledby="h-blocks" hidden>
+    <div class="blocks-h"><div><h2 id="h-blocks">Blocked rooms</h2><p>Rooms taken out of sale for repairs, a hold, or bookings made on other platforms. The Telegram bot, the phone line and the desk all see them.</p></div><button class="btn line" type="button" id="bblock">Block rooms</button></div>
+    <div id="blist"></div>
+  </section>
+  <p class="sr" id="mstatus" role="status" aria-live="polite"></p>
   <p class="foot-note">Totals are nights times the room rate. The journey shows booked, reminder, checked in, checkout reminder, checked out, thanked. Stay codes go only to guests on Telegram, from the day they check in; guests who booked by phone and are not on Telegram have no code, so check their ID and reference instead.</p>
 </main>
 </div>
 </div>
+<dialog id="mdlg" class="mdlg" aria-labelledby="mdt"><div class="mhead"><h2 id="mdt"></h2><button class="btn line small" type="button" id="mclose">Close</button></div><div id="mbody"></div></dialog>
 
 <script src="/app/data.js"></script>
 <script src="/app/live.js"></script>
 <script src="/app/app.js"></script>
+<script src="/app/manage.js"></script>
 </body>
 </html>

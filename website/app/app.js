@@ -331,6 +331,7 @@
     };
     compute();
     const labels = [['arriving', 'Arriving today'], ['inhouse', 'In house'], ['leaving', 'Leaving today'], ['all', 'All']];
+    const payInfo = (b) => (b.total > 0 ? (b.paid >= b.total ? ['pos', 'Paid in full'] : b.paid > 0 ? ['part', 'Paid ' + FD.naira(b.paid)] : ['neg', 'Unpaid']) : ['', '']);
     const paintSum = () => $('#bsum').replaceChildren(
       ...[[sets.arriving.length, 'arriving today'], [sets.inhouse.length, 'in house'], [sets.leaving.length, 'leaving today'], [FD.naira(sets.arriving.reduce((s, b) => s + b.total, 0)), 'booked for today\'s arrivals']]
         .map(([n, t]) => h('div', {}, h('b', { text: String(n) }), h('span', { text: t }))));
@@ -341,19 +342,19 @@
       const rank = (b) => (b.stage >= 4 ? 3 : b.in === today ? 0 : b.stage >= 2 ? 1 : 2);   // today's arrivals, then in house, then coming up, then done
       list = [...list].sort((a, b) => key === 'name' ? a.guest.localeCompare(b.guest) : key === 'total' ? b.total - a.total : key === 'in' ? a.in.localeCompare(b.in) || a.guest.localeCompare(b.guest) : rank(a) - rank(b) || a.in.localeCompare(b.in));
       meta.textContent = `${list.length} stay${list.length === 1 ? '' : 's'}, ${FD.naira(list.reduce((s, b) => s + b.total, 0))}`;
-      body.replaceChildren(...(list.length ? list.map((b) => h('div', { class: 'tr cols-b', role: 'row' },
+      body.replaceChildren(...(list.length ? list.map((b) => h('div', Object.assign({ class: 'tr cols-b', role: 'row' }, LIVE ? { 'data-bid': b.id, tabindex: '0', title: 'Open ' + b.guest + ' to manage this stay' } : {}),
         h('div', { class: 'id' }, disc(b.guest, b.hue), h('div', {}, h('b', { text: b.guest }), h('small', { text: b.ref + (b.linked === false ? ', not on Telegram yet' : '') }))),
         h('div', {}, `${b.type}`, h('small', { class: 'sub', style: 'display:block;color:var(--muted);font-size:13px', text: 'Room ' + b.room })),
         h('div', {}, `${FD.fmtDay(b.in)} to ${FD.fmtDay(b.out)}`, h('small', { style: 'display:block;color:var(--muted);font-size:13px', text: `${b.nights} night${b.nights > 1 ? 's' : ''}` })),
         h('div', { class: 'jr', title: b.note }, h('span', { class: 'bars', 'aria-hidden': 'true' }, FD.STAGES.map((s, i) => h('i', { class: i < b.stage ? 'done' : i === b.stage ? 'cur' : '' }))), h('span', { text: FD.STAGE_WORD[b.stage] })),
         h('div', { text: b.src }),
-        h('div', { class: 'num', text: FD.naira(b.total) }))) : [h('p', { class: 'foot-note', text: 'No stays match.' })]));
+        h('div', { class: 'num' }, FD.naira(b.total), LIVE && payInfo(b)[1] ? h('small', { class: 'paid ' + payInfo(b)[0], text: payInfo(b)[1] }) : null))) : [h('p', { class: 'foot-note', text: 'No stays match.' })]));
     };
     qEl.addEventListener('input', () => { q = qEl.value.trim().toLowerCase(); paint(); });
     if (gq) gq.addEventListener('input', () => { q = gq.value.trim().toLowerCase(); qEl.value = gq.value; paint(); });
     sortEl.addEventListener('change', paint);
     $('#bexport').addEventListener('click', () => {
-      const rows = [['Guest', 'Reference', 'Room', 'Check-in', 'Check-out', 'Nights', 'Source', 'Stage', 'Total (NGN)'], ...sets[tab].map((b) => [b.guest, b.ref, b.type + ' ' + b.room, b.in, b.out, b.nights, b.src, FD.STAGE_WORD[b.stage], b.total])];
+      const rows = [['Guest', 'Reference', 'Room', 'Check-in', 'Check-out', 'Nights', 'Source', 'Stage', 'Total (NGN)'].concat(LIVE ? ['Paid (NGN)'] : []), ...sets[tab].map((b) => [b.guest, b.ref, b.type + ' ' + b.room, b.in, b.out, b.nights, b.src, FD.STAGE_WORD[b.stage], b.total].concat(LIVE ? [b.paid || 0] : []))];
       const csv = rows.map((r) => r.map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
       const a = h('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: 'stays-' + tab + '.csv' }); document.body.append(a); a.click(); a.remove();
     });
