@@ -511,8 +511,27 @@
 
   /* ---------- SETTINGS ---------- */
   if (page === 'settings') {
-    if (LIVE) $('.title-row').after(h('p', { class: 'foot-note', text: 'Preview: staff, channels and usage on this page are not connected to your hotel yet. Facts and the inbox are live.' }));
-    $$('.tog').forEach((t) => t.addEventListener('click', () => t.setAttribute('aria-checked', String(t.getAttribute('aria-checked') !== 'true'))));
+    if (LIVE) $('.title-row').after(h('p', { class: 'foot-note', text: 'Preview: staff, channels and usage on this page are not connected to your hotel yet. Facts, the inbox and the daily summary are live.' }));
+    $$('.tog:not([data-live])').forEach((t) => t.addEventListener('click', () => t.setAttribute('aria-checked', String(t.getAttribute('aria-checked') !== 'true'))));
+    // the daily summary is real: its switch and hour are the settings DAILY_DIGEST and DAILY_DIGEST_HOUR that the scheduler reads
+    const dgT = $('#dgtoggle'), dgH = $('#dghour');
+    if (dgT && dgH) {
+      const fact = (k) => (window.FD_FACTS || {})[k];
+      const dgOn = () => String(fact('DAILY_DIGEST') || 'yes').toLowerCase() !== 'no';
+      const dgPaint = () => {
+        dgT.setAttribute('aria-checked', String(dgOn())); dgT.disabled = !LIVE; dgH.disabled = !LIVE;
+        dgH.value = String(parseInt(fact('DAILY_DIGEST_HOUR'), 10) || 8);
+        $('#dgstate').textContent = LIVE ? (dgOn() ? 'On' : 'Off') : 'On (sample)';
+      };
+      const dgSave = async (key, value, said) => {
+        try { await window.Alejo.saveFact(key, value); await window.Alejo.refresh(); $('#dgstatus').textContent = said; }
+        catch (e) { $('#dgstatus').textContent = e.message || 'Could not save that.'; }
+        dgPaint();
+      };
+      dgT.addEventListener('click', () => { if (!LIVE) return; dgT.disabled = true; dgSave('DAILY_DIGEST', dgOn() ? 'no' : 'yes', dgOn() ? 'The daily summary is off.' : 'The daily summary is on.'); });
+      dgH.addEventListener('change', () => { if (!LIVE) return; dgSave('DAILY_DIGEST_HOUR', dgH.value, 'The daily summary will be sent at ' + dgH.options[dgH.selectedIndex].text + '.'); });
+      dgPaint();
+    }
     const used = 212, included = 400, extra = Math.max(0, used - included), rate = 80, base = 150000;
     $('#u-used').textContent = String(used); $('#u-left').textContent = String(Math.max(0, included - used));
     $('#u-bill').textContent = FD.naira(base + extra * rate);

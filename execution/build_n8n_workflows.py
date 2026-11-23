@@ -684,6 +684,24 @@ return $input.all().filter(i => i.json.id).map(i => ({{ json: {{ booking_id: i.j
     w.link(sh, th, 0)
     w.link(ch, mh)
 
+    # I: daily summary for the manager. Every morning (from DAILY_DIGEST_HOUR, default 08:00 Lagos time, for three hours, once per day) the
+    # staff group, or the chat in MANAGER_CHAT_ID, gets arrivals, departures, rooms free, last 24 hours and what needs attention.
+    # DAILY_DIGEST = no switches it off. If the figures cannot be fetched nothing is sent or marked, so the next run tries again.
+    gi = if_node(w, "Daily summary due?",
+                 "={{ String($json.settings.DAILY_DIGEST || 'yes').toLowerCase() !== 'no' && $json.hour >= (parseInt($json.settings.DAILY_DIGEST_HOUR, 10) || 8) "
+                 "&& $json.hour < (parseInt($json.settings.DAILY_DIGEST_HOUR, 10) || 8) + 3 && String($json.settings.DAILY_DIGEST_LAST || '') !== $json.today }}",
+                 "boolean", "true", (900, 2700))
+    ri = http(w, "Daily figures", "POST", "=" + SB + "/rpc/daily_digest", (1120, 2700), body="={{ JSON.stringify({}) }}", always=True)
+    ci = code(w, "Compose daily summary", booking_js("daily_digest_compose.js"), (1340, 2700))
+    ti = tg_send(w, "Send daily summary", "={{ $json.chat_id }}", "={{ $json.text }}", (1560, 2640), onError="continueRegularOutput")
+    mi = http(w, "Mark daily summary done", "POST", "=" + SB + "/hotel_settings?on_conflict=key", (1560, 2780),
+              prefer="resolution=merge-duplicates,return=minimal",
+              body="={{ JSON.stringify({ key: 'DAILY_DIGEST_LAST', value: $('Context').first().json.today, updated_at: new Date().toISOString() }) }}")
+    w.chain(ctx, gi)
+    w.link(gi, ri, 0)
+    w.chain(ri, ci, ti)
+    w.link(ci, mi)
+
     # D: service recovery, part 1. A request, complaint or emergency that is still open goes back to the staff group:
     # every 30 minutes (every 10 for an emergency), at most 3 times, and the last one says to tell the duty manager.
     qd = http(w, "Open service items", "GET",
