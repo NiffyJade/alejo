@@ -34,6 +34,9 @@ const LANG = {
     expired: 'That booking request has expired. Tell me the dates and room type you would like and I will set it up again.',
     changed: 'Those details have changed since that summary. Please tap Confirm on my latest summary, or tell me what you would like.',
     cancelled: 'No problem, I have cancelled that. Tell me whenever you would like to look at rooms or book.',
+    followup: (name, type, range) => `Hi${name ? ' ' + name : ''}! 👋 You were looking at a ${type} room for ${range}. Would you like to carry on with your booking? I can pick up where we stopped and check the room again for you.`,
+    followup_yes: 'Yes, continue',
+    followup_no: 'No, thanks',
   },
   pcm: {
     cleared: 'No wahala, I don clear that booking request. Anything else wey I fit help you with?',
@@ -65,6 +68,9 @@ const LANG = {
     expired: 'That booking request don expire. Tell me the dates and room type wey you want make I set am up again.',
     changed: 'Those details don change since that summary. Abeg tap Confirm for my latest summary, or tell me wetin you want.',
     cancelled: 'No wahala, I don cancel am. Tell me anytime you wan check rooms or book.',
+    followup: (name, type, range) => `Hi${name ? ' ' + name : ''}! 👋 You dey look ${type} room for ${range}. You still wan carry on with the booking? I fit continue from where we stop, and check the room again for you.`,
+    followup_yes: 'Yes, continue',
+    followup_no: 'No, thank you',
   },
 };
 const tr = (lang, key, ...a) => { const v = (LANG[lang] || LANG.en)[key]; return typeof v === 'function' ? v(...a) : v; };

@@ -42,7 +42,7 @@
       rest('guests?select=id,name,phone,telegram_chat_id&limit=1000'),
       rest('bookings?select=*&order=check_in.desc&limit=1000'),
       rest('escalations?select=*&order=created_at.desc&limit=500'),
-      rest('messages?select=guest_id,direction,text,created_at&order=created_at.desc&limit=1000'),
+      rest('messages?select=guest_id,direction,text,created_at&guest_id=not.is.null&order=created_at.desc&limit=1000'),   // people who have not booked yet are counted on the Enquiries page, not shown as conversations
       rest('room_types?select=name,nightly_rate,total_rooms,active'),
       rest('knowledge_entries?select=id,category,question,answer,source&limit=1000'),
       rest('hotel_settings?select=key,value&limit=500'),
@@ -202,6 +202,7 @@
     take: (ids, name) => rest('escalations?id=in.(' + ids.join(',') + ')&status=eq.open', { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ assigned_to: name, assigned_at: name ? new Date().toISOString() : null }) }),   // name = null releases it
     clock: () => clock(new Date()),
     manage,
+    report: (days) => rest('rpc/enquiry_report', { method: 'POST', body: JSON.stringify({ p_days: days }) }),
     async ask(question) {                                           // the staff copilot: answers from the hotel's live records (edge function staff-copilot)
       const t = await token();
       const r = await fetch(SB + '/functions/v1/staff-copilot', { method: 'POST', headers: { apikey: ANON, authorization: 'Bearer ' + t, 'content-type': 'application/json' }, body: JSON.stringify({ question }) });

@@ -4,6 +4,7 @@ const c = $('Classify').first().json;
 const dr = $input.first().json || {};
 const lang = dr.lang || 'en';
 const msg = key => [{ json: { mode: 'msg', lang, text: tr(lang, key) } }];
+if (c.action === 'bkcont') return [{ json: { mode: 'cont', lang } }];       // "Yes, continue" under a follow-up: back into the normal conversation
 if (c.action === 'bkno') return [{ json: { mode: 'cancel', lang, text: tr(lang, 'cancelled') } }];
 const fresh = !!dr.chat_id && Date.now() - Date.parse(dr.updated_at) < 6 * 3600 * 1000;
 if (!fresh || !dr.check_in || !dr.check_out || !dr.room_type) return msg('expired');

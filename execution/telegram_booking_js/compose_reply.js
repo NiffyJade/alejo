@@ -71,8 +71,9 @@ const kind = escalate ? (p.kind || 'question') : 'question', category = escalate
 const TITLE = { emergency: '🚨 EMERGENCY', complaint: '⚠️ Guest complaint', request: '🛎 Guest request' };
 const alert_title = (TITLE[kind] || '🛎 Guest needs help') + (['request', 'complaint'].includes(kind) && category ? ` (${category})` : '');
 const row = { chat_id: p.chat_id, check_in: d.check_in, check_out: d.check_out, room_type: d.room_type,
-  guest_name: d.guest_name, phone: d.phone, phone_verified: !!d.phone_verified, lang, updated_at: new Date().toISOString() };
-return [{ json: { chat_id: p.chat_id, guest_id: p.guest_id || null, booking_id: p.booking_id || null, room: p.room,
+  guest_name: d.guest_name, phone: d.phone, phone_verified: !!d.phone_verified, lang, updated_at: new Date().toISOString(),
+  ...(p.from_name ? { tg_name: p.from_name } : {}) };
+return [{ json: { chat_id: p.chat_id, intent: p.intent || null, guest_id: p.guest_id || null, booking_id: p.booking_id || null, room: p.room,
   guest_name: p.guest_name || (p.from_name ? p.from_name + ' (not linked to a booking)' : 'Unknown guest'),
   question: p.question, reply, escalate, ai_answered: ai, markup, confirm_data: confirm,
   kind, category, alert_title, chase: !!p.chase, chase_id: p.chase_id || null, chase_next: p.chase_next || 0, chase_alert: !!p.chase_alert, chase_text: p.chase_text || '',

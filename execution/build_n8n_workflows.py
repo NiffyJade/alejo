@@ -305,11 +305,12 @@ def telegram_bot():
     sdraft = http(w, "Save draft", "POST", "=" + SB + "/booking_drafts?on_conflict=chat_id", (4660, -120),
                   prefer="resolution=merge-duplicates,return=minimal",
                   body="={{ JSON.stringify(" + CR + ".draft_row) }}", onError="continueRegularOutput")
-    hasg = if_node(w, "Has guest?", "={{ " + CR + ".guest_id }}", "string", "notEmpty", (4880, -60))
     log = http(w, "Log messages", "POST", "=" + SB + "/messages", (5100, -120), prefer="return=minimal",
-               body="={{ JSON.stringify([{ guest_id: " + CR + ".guest_id, direction: 'in', text: " + CR + ".question, "
-                    "created_at: new Date(Date.now() - 1000).toISOString() }, { guest_id: " + CR + ".guest_id, direction: 'out', "
-                    "text: " + CR + ".reply, created_at: new Date().toISOString() }]) }}")
+               # Logged for everyone, including people who have not booked yet (guest_id empty): the Enquiries report counts conversations.
+               # This runs after the reply is sent, so it adds nothing to how long the guest waits.
+               body="={{ JSON.stringify([{ guest_id: " + CR + ".guest_id, chat_id: " + CR + ".chat_id, direction: 'in', text: " + CR + ".question, "
+                    "intent: " + CR + ".intent, created_at: new Date(Date.now() - 1000).toISOString() }, { guest_id: " + CR + ".guest_id, "
+                    "chat_id: " + CR + ".chat_id, direction: 'out', text: " + CR + ".reply, intent: null, created_at: new Date().toISOString() }]) }}")
     w.link(sw, ctx, 3)
     # "typing..." in the guest's Telegram while the answer is being worked out (side branches: they never change the data flow)
     # Telegram shows "typing..." for only 5 seconds per signal, so the "Typing Keepalive" workflow (below) sends it again every
@@ -345,9 +346,8 @@ def telegram_bot():
     for s in (send_text, send_confirm, send_phone):
         w.link(s, dsave)
     w.link(dsave, sdraft, 0)
-    w.link(dsave, hasg, 1)
-    w.link(sdraft, hasg)
-    w.link(hasg, log, 0)
+    w.link(dsave, log, 1)
+    w.link(sdraft, log)
 
     # ---- CALLBACK: Check in / Check out buttons
     ack = w.add("Acknowledge tap", "n8n-nodes-base.telegram",
@@ -468,7 +468,7 @@ def telegram_bot():
                (920, 1500), always=True)
     chk = code(w, "Check confirm", booking_js("check_confirm.js"), (1140, 1500))
     mode_rules = []
-    for m in ("book", "cancel", "msg"):
+    for m in ("book", "cancel", "msg", "cont"):
         mode_rules.append({"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 3},
                                           "conditions": [cond("={{ $json.mode }}", "string", "equals", m)], "combinator": "and"},
                            "renameOutput": True, "outputKey": m})
@@ -493,6 +493,7 @@ def telegram_bot():
     w.link(mode, csend, 1)
     w.link(csend, cdel)
     w.link(mode, msend, 2)
+    w.link(mode, ctx, 3)       # "Yes, continue": answer it like any other message from the guest
 
     # ---- HELLO: someone opened the bot without a booking link
     hello = tg_send(w, "Say hello", "={{ $json.chat_id }}",
@@ -513,7 +514,8 @@ def scheduler():
 const now = new Date(), lagos = new Date(now.getTime() + 3600 * 1000);
 const iso = d => d.toISOString().slice(0, 10);
 return [{ json: { now: now.toISOString(), today: iso(lagos), tomorrow: iso(new Date(lagos.getTime() + 86400000)),
-  hour: lagos.getUTCHours(), cutoff: new Date(now.getTime() - 30 * 60000).toISOString() } }];
+  hour: lagos.getUTCHours(), cutoff: new Date(now.getTime() - 30 * 60000).toISOString(),
+  followBefore: new Date(now.getTime() - 90 * 60000).toISOString(), followAfter: new Date(now.getTime() - 5 * 3600000).toISOString() } }];
 """, (220, 300))
     st = http(w, "Get settings", "GET", "=" + SB + "/hotel_settings?select=key,value", (440, 300))
     ctx = code(w, "Context", """
@@ -605,6 +607,38 @@ return $input.all().filter(i => i.json.id).map(i => ({{ json: {{ booking_id: i.j
     w.link(gf, qf, 0)
     w.chain(qf, cf, tf)
     w.link(tf, mf, 0)
+
+    # G: follow up an unfinished booking. Someone who asked for a room and dates and then went quiet gets ONE message, 90 minutes to
+    # 5 hours later, between 08:00 and 20:59 Lagos time, offering to carry on (it promises nothing about the room). It has two buttons:
+    # "Yes, continue" re-enters the normal bot, "No, thanks" clears the draft. Switch it off with the setting FOLLOWUP_ENABLED = no
+    # (the Enquiries page has the switch). The follow-up is logged as a message with intent "followup" so the report can credit it.
+    gg = if_node(w, "Follow-up time? (08:00 to 20:59, switched on)",
+                 "={{ $json.hour >= 8 && $json.hour <= 20 && String($json.settings.FOLLOWUP_ENABLED || 'yes').toLowerCase() !== 'no' }}",
+                 "boolean", "true", (900, 2100))
+    qg = http(w, "Unfinished bookings", "GET",
+              "=" + SB + "/booking_drafts?room_type=not.is.null&check_in=gte.{{ $json.today }}&check_out=not.is.null&followup_sent_at=is.null"
+              "&updated_at=lt.{{ $json.followBefore }}&updated_at=gt.{{ $json.followAfter }}&select=chat_id,check_in,check_out,room_type,guest_name,tg_name,lang",
+              (1120, 2100), always=True)
+    cg = code(w, "Compose follow-ups", booking_js("followup_compose.js"), (1340, 2100))
+    tg_follow = w.add("Send follow-up", "n8n-nodes-base.telegram", {
+        "resource": "message", "operation": "sendMessage", "chatId": "={{ $json.chat_id }}",
+        "text": plain("={{ $json.text }}"),
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {"rows": [{"row": {"buttons": [
+            {"text": "={{ $json.yes_label }}", "additionalFields": {"callback_data": "fuyes:x"}},
+            {"text": "={{ $json.no_label }}", "additionalFields": {"callback_data": "funo:x"}}]}}]},
+        "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}, (1560, 2100), ver=1.2, creds=C["tg"], onError="continueRegularOutput")
+    # marked sent even when Telegram refused it (for example the person blocked the bot): one attempt only, never a retry loop
+    mg = http(w, "Mark follow-up sent", "PATCH", "=" + SB + "/booking_drafts?chat_id=eq.{{ $('Compose follow-ups').item.json.chat_id }}", (1780, 2100),
+              body="={{ JSON.stringify({ followup_sent_at: new Date().toISOString() }) }}", prefer="return=minimal")
+    dg = if_node(w, "Delivered?", "={{ !$('Send follow-up').item.json.error }}", "boolean", "true", (2000, 2100))
+    lg = http(w, "Log follow-up", "POST", "=" + SB + "/messages", (2220, 2060), prefer="return=minimal",
+              body="={{ JSON.stringify({ chat_id: $('Compose follow-ups').item.json.chat_id, direction: 'out', intent: 'followup', "
+                   "text: $('Compose follow-ups').item.json.text, created_at: new Date().toISOString() }) }}")
+    w.chain(ctx, gg)
+    w.link(gg, qg, 0)
+    w.chain(qg, cg, tg_follow, mg, dg)
+    w.link(dg, lg, 0)
 
     # D: service recovery, part 1. A request, complaint or emergency that is still open goes back to the staff group:
     # every 30 minutes (every 10 for an emergency), at most 3 times, and the last one says to tell the duty manager.

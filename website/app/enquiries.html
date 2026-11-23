@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Enquiries · Alejo staff dashboard</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f3f5fa">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://api.fontshare.com">
+<link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body data-page="enquiries">
+<a class="skip" href="#main">Skip to content</a>
+<div class="app">
+<aside class="side" id="side" aria-label="Dashboard">
+  <a class="brand" href="/app/index.html" aria-label="Alejo, today"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0z" fill="#111"/><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="#111"/><circle cx="12" cy="6.2" r="2" fill="#1a4be0"/></svg><span class="brand-t"><b translate="no">Alejo</b></span></a>
+  <div class="scope"><b>BrightSide Hotel</b><span>Lagos, Nigeria</span></div>
+  <nav class="nav" aria-label="Pages"><a href="/app/index.html">Today</a><a href="/app/inbox.html">Inbox <i class="cnt" id="needCount" role="img" aria-label="guests need you">3</i></a><a href="/app/enquiries.html" aria-current="page">Enquiries</a><a href="/app/bookings.html">Bookings</a><p class="nav-h">Your hotel</p><a href="/app/knowledge.html">Facts</a><a href="/app/settings.html">Settings</a></nav>
+  <div class="side-foot">
+    <div class="links"><a class="web-link" href="/">Website</a><span id="authSlot"></span></div>
+    <div class="me"><span class="acct" id="acct" title="Amaka Okafor, front desk">AO</span><span><b id="meName">Amaka Okafor</b><small id="meRole">Front desk, nights</small></span></div>
+  </div>
+</aside>
+<div class="scrim" id="scrim"></div>
+<div class="frame-main">
+  <header class="top">
+    <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="side">Menu</button>
+    <span class="top-name" translate="no">Alejo</span>
+    <div class="search"><label class="sr" for="q">Search</label><input id="q" name="q" type="search" placeholder="Search stays…" autocomplete="off" spellcheck="false"><kbd aria-hidden="true">/</kbd></div>
+    <span class="demo-note" id="demoNote">Sample data, Tue 27 Oct, 02:31</span>
+  </header>
+<main class="sheet" id="main">
+  <div class="title-row">
+    <div><h1>Enquiries</h1><p class="sub">Who asked, who booked, and who is still thinking about it.</p></div>
+    <div class="actions" role="group" aria-label="Period"><button class="btn line" type="button" data-days="7" aria-pressed="true">Last 7 days</button><button class="btn line" type="button" data-days="30" aria-pressed="false">Last 30 days</button></div>
+  </div>
+  <p class="foot-note" id="eqnote" role="status"></p>
+  <p class="merr" id="eqerr" role="alert"></p>
+  <div class="sum" id="eqkpis" aria-label="Summary"></div>
+  <section class="eqsec" aria-labelledby="h-funnel">
+    <h2 id="h-funnel">From first message to booking</h2>
+    <div class="funnel" id="eqfunnel"></div>
+  </section>
+  <section class="eqsec" aria-labelledby="h-open">
+    <h2 id="h-open">Still thinking</h2>
+    <p class="hint">Asked about rooms, did not book, last message within 3 days.</p>
+    <div class="tbl" role="table" aria-label="Unfinished enquiries">
+      <div class="th cols-q" role="row"><div>Guest</div><div>Looking at</div><div>Last message</div><div>Follow-up</div></div>
+      <div id="eqopen"></div>
+    </div>
+    <p class="foot-note" id="eqlost"></p>
+  </section>
+  <section class="eqsec" aria-labelledby="h-fu">
+    <h2 id="h-fu">Follow up unfinished bookings</h2>
+    <div class="srow"><div><div class="t">Automatic follow-up <span class="pill" id="eqfustate"></span></div>
+      <p class="d">Once, between 90 minutes and 5 hours after someone asked for a room and dates and then went quiet, and only between 08:00 and 20:59, Alejo asks if they want to carry on. It promises nothing about the room, and the guest can tap No thanks.</p>
+      <p class="d" id="eqfustats"></p></div>
+      <button class="tog" id="eqtoggle" type="button" role="switch" aria-checked="true" aria-label="Follow up unfinished bookings"></button></div>
+    <p class="sr" id="eqstatus" role="status" aria-live="polite"></p>
+  </section>
+  <p class="foot-note">An enquiry is one Telegram conversation (a gap of more than 12 hours starts a new one). Phone calls are not counted here yet. "Booked" means the same person booked on Telegram during or within 2 days of the conversation.</p>
+</main>
+</div>
+</div>
+
+<script src="/app/data.js"></script>
+<script src="/app/live.js"></script>
+<script src="/app/app.js"></script>
+<script src="/app/enquiries.js"></script>
+</body>
+</html>

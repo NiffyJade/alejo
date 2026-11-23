@@ -5,7 +5,14 @@ let out = { type: 'ignore' };
 if (u.callback_query) {
   const q = u.callback_query, raw = String(q.data || '');
   const [action, id] = raw.split(':');
-  if (/^bk(ok|no):/.test(raw)) {
+  const who = [q.from && q.from.first_name, q.from && q.from.last_name].filter(Boolean).join(' ').slice(0, 60);
+  if (/^fu(yes|no):/.test(raw)) {
+    // buttons under the follow-up for an unfinished booking (sent by the scheduler)
+    if (q.message && q.message.chat.type === 'private')
+      out = raw.startsWith('fuyes')
+        ? { type: 'booking_cb', query_id: q.id, chat_id: q.message.chat.id, action: 'bkcont', payload: '', text: 'Yes, I would like to continue my booking.', from_name: who }
+        : { type: 'booking_cb', query_id: q.id, chat_id: q.message.chat.id, action: 'bkno', payload: '' };
+  } else if (/^bk(ok|no):/.test(raw)) {
     // Confirm / Cancel under a booking summary; the payload names the dates and room type that were summarised
     if (q.message && q.message.chat.type === 'private')
       out = { type: 'booking_cb', query_id: q.id, chat_id: q.message.chat.id, action, payload: raw.slice(raw.indexOf(':') + 1).slice(0, 60) };
