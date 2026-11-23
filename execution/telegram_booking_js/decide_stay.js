@@ -21,7 +21,7 @@ if (c.action === 'checkin') {
   const lines = ["✅ You're checked in!", b.room_number ? `Room: ${b.room_number}` : 'Your room number will be confirmed by the front desk.',
     `Your private stay code: ${b.stay_code}`];
   if (s.WIFI_NAME && s.WIFI_PASSWORD) lines.push(`Wi-Fi: ${s.WIFI_NAME} / ${s.WIFI_PASSWORD}`);
-  lines.push('Keep this code private. Message me any time if you need anything.');
+  lines.push('Keep this code private. Show it at the front desk to confirm it is you, for example to collect a key or charge something to your room. Message me any time if you need anything.');
   return res(lines.join('\n'), b.status === 'checked_in' ? null : { status: 'checked_in', checked_in_at: now });
 }
 if (c.action === 'checkout') {

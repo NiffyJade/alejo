@@ -48,7 +48,7 @@ const decide = (action, booking, type = 'menu', viaButton = false) => {
 };
 ok('menu check-in gives the stay code and marks the booking checked in; too early does not', () => {
   const r = decide('checkin', bk());
-  assert(/checked in/.test(r.text) && /123456/.test(r.text) && /Net \/ pw/.test(r.text)); assert.strictEqual(r.patch.status, 'checked_in'); assert.strictEqual(r.booking_id, bk().id);
+  assert(/checked in/.test(r.text) && /123456/.test(r.text) && /Net \/ pw/.test(r.text) && /Show it at the front desk/.test(r.text)); assert.strictEqual(r.patch.status, 'checked_in'); assert.strictEqual(r.booking_id, bk().id);
   const early = decide('checkin', bk({ check_in: plus(5), check_out: plus(7) }));
   assert(/Check-in opens on/.test(early.text)); assert(!/123456/.test(early.text)); assert.strictEqual(early.patch, null);
 });
