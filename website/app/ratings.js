@@ -24,7 +24,7 @@
   const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   const ago = (iso) => { const m = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60000)); return m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; };
-  const dayLabel = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Africa/Lagos' });
+  const dayLabel = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: ((window.Alejo && window.Alejo.hotel && window.Alejo.hotel() && window.Alejo.hotel().timezone) || 'Africa/Lagos') });
 
   // made-up figures for the public sample dashboard
   const SAMPLE = (days) => {

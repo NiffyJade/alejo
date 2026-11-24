@@ -1,9 +1,11 @@
 """Load knowledge/nigerian_hotel_kb.json into Supabase.
 
-- knowledge_entries: upserted by id (re-running refreshes seed text, leaves staff-learned rows alone).
-- hotel_settings: inserted only if the key is missing, so values you've filled in are never overwritten.
+- knowledge_entries: upserted by (hotel, id) (re-running refreshes seed text, leaves staff-learned rows alone).
+- hotel_settings: inserted only if the hotel's key is missing, so values you've filled in are never overwritten.
 
-Usage: python -I execution/load_knowledge.py [--dry-run]
+Usage: python -I execution/load_knowledge.py HOTEL_SLUG [--dry-run]
+The standard Nigerian-hotel answers are written for ONE hotel (every row carries its hotel). Entries that mention a city or a service the
+hotel does not have should be reviewed before switching the hotel on; entries with a blank [[PLACEHOLDER]] stay withheld by the bot.
 Requires SUPABASE_URL and SUPABASE_SERVICE_KEY in .env and sql/001_schema.sql already run.
 """
 import json
@@ -45,7 +47,19 @@ def post(env, table, rows, prefer, on_conflict=None):
         sys.exit(f"{table}: HTTP {e.code} {e.read().decode('utf-8', 'replace')}")
 
 
+def hotel_id(env, slug):
+    req = urllib.request.Request(f"{env['SUPABASE_URL']}/rest/v1/hotels?slug=eq.{slug}&select=id",
+                                 headers={"apikey": env["SUPABASE_SERVICE_KEY"], "Authorization": f"Bearer {env['SUPABASE_SERVICE_KEY']}"})
+    rows = json.loads(urllib.request.urlopen(req, timeout=60).read().decode("utf-8"))
+    if not rows:
+        sys.exit(f"no hotel with slug '{slug}'")
+    return rows[0]["id"]
+
+
 def main():
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if len(args) != 1 or not args[0].replace("-", "").isalnum():
+        sys.exit("Usage: python -I execution/load_knowledge.py HOTEL_SLUG [--dry-run]")
     kb = json.loads((ROOT / "knowledge" / "nigerian_hotel_kb.json").read_text(encoding="utf-8"))
     entries = [
         {"id": e["id"], "category": e["category"], "question": e["question"], "answer": e["answer"]}
@@ -56,8 +70,11 @@ def main():
     if "--dry-run" in sys.argv:
         return
     env = load_env()
-    post(env, "knowledge_entries", entries, "resolution=merge-duplicates,return=minimal", on_conflict="id")
-    post(env, "hotel_settings", settings, "resolution=ignore-duplicates,return=minimal", on_conflict="key")
+    hid = hotel_id(env, args[0])
+    entries = [{**e, "hotel_id": hid} for e in entries]
+    settings = [{**s, "hotel_id": hid} for s in settings]
+    post(env, "knowledge_entries", entries, "resolution=merge-duplicates,return=minimal", on_conflict="hotel_id,id")
+    post(env, "hotel_settings", settings, "resolution=ignore-duplicates,return=minimal", on_conflict="hotel_id,key")
     print("loaded")
 
 

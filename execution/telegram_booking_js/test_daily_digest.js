@@ -1,9 +1,9 @@
 // Offline tests for the daily manager summary text. Run: node execution/telegram_booking_js/test_daily_digest.js
 // (the database side is tested by execution/test_daily_digest.sql)
 const fs = require('fs'), path = require('path'), assert = require('assert');
-const load = f => fs.readFileSync(path.join(__dirname, f), 'utf8').replace(/__STAFF__/g, '-100999');
+const load = f => fs.readFileSync(path.join(__dirname, f), 'utf8');
 const run = (d, settings = { HOTEL_NAME: 'BrightSide Hotel' }) =>
-  new Function('$', '$input', load('daily_digest_compose.js'))(() => ({ first: () => ({ json: { settings } }) }), { first: () => ({ json: d }) });
+  new Function('$', '$input', load('daily_digest_compose.js'))(() => ({ first: () => ({ json: { settings, hotel: { name: 'BrightSide Hotel', staff_chat_id: -100999 } } }) }), { first: () => ({ json: d }) });
 const compose = (d, settings) => run(d, settings)[0].json;
 let n = 0; const ok = (name, fn) => { fn(); n++; console.log('ok -', name); };
 
@@ -49,7 +49,7 @@ ok('odd guest names cannot break the message', () => {
   const t = compose({ ...busy, arriving: [{ name: '', room_type: null, room_number: null, balance: 0 }, { name: '  ', balance: 'x' }, { name: '<b>x</b>', room_type: 'Deluxe' }] }).text;
   assert(!/undefined|NaN/.test(t), t);
 });
-ok('a missing hotel name still gives a sensible title', () => assert(/^☀️ Your hotel, Tue 24 Nov/.test(compose(busy, {}).text)));
+ok('a missing hotel name still gives a sensible title', () => assert(/^☀️ BrightSide Hotel, Tue 24 Nov/.test(compose(busy, {}).text)));
 
 ok('if the figures could not be fetched, nothing is sent (and so nothing is marked done)', () => {
   assert.deepStrictEqual(run({}), []); assert.deepStrictEqual(run({ error: 'timeout' }), []); assert.deepStrictEqual(run(null), []);

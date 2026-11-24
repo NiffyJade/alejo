@@ -2,7 +2,8 @@
 // Run: node execution/telegram_booking_js/test_ratings.js   (the database side is tested by execution/test_ratings.sql)
 const fs = require('fs'), path = require('path'), assert = require('assert');
 const load = f => fs.readFileSync(path.join(__dirname, f), 'utf8').replace('// __LANG__', fs.readFileSync(path.join(__dirname, 'lang.js'), 'utf8'))
-  .replace(/__HOTEL__/g, 'BrightSide Hotel').replace(/__MODEL__/g, 'm').replace(/__STAFF__/g, '-100999');
+  .replace(/__MODEL__/g, 'm');
+const HOTEL = { id: 'h-test', slug: 'test', name: 'BrightSide Hotel', timezone: 'Africa/Lagos', staff_chat_id: -100999 };   // the hotel every update carries
 function run(file, nodes, input) {
   const wrap = list => ({ first: () => ({ json: list[0] }), all: () => list.map(j => ({ json: j })) });
   const $ = name => { if (!(name in nodes)) throw new Error('no node ' + name); return wrap(nodes[name]); };
@@ -47,7 +48,7 @@ ok('refused taps get a plain explanation and never an alert', () => {
 ok('no guest name is fine', () => { assert(/^Thank you! /.test(reply(rec({ rating: 5, guest_name: '' })).text)); });
 
 // ---- the thank-you
-const thanks = (settings, rows) => run('thanks_compose.js', { Context: [{ settings }] }, rows);
+const thanks = (settings, rows) => run('thanks_compose.js', { Context: [{ settings, hotel: HOTEL }] }, rows);
 ok('the thank-you asks for a rating and goes to every guest it was found for', () => {
   const out = thanks({}, [{ id: 'b1', guests: { name: 'Ada Obi', telegram_chat_id: 42 } }, { id: 'b2', guests: { name: 'Tunde', telegram_chat_id: 43 } }, {}]);
   assert.strictEqual(out.length, 2); assert(/How was your stay\? Tap a rating below, from 1 \(poor\) to 5 \(excellent\)/.test(out[0].text) && /Ada Obi/.test(out[0].text) && /BrightSide Hotel/.test(out[0].text));

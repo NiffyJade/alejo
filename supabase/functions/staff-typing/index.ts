@@ -21,6 +21,18 @@ const cors = (origin: string | null) => ({
 const json = (body: unknown, status: number, origin: string | null) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...cors(origin) } });
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const likeEsc = (s: string) => s.replace(/[\\%_]/g, "\\$&");     // an email may contain _ or %, which ilike would treat as wildcards
+// What this signed-in person may do in one hotel: their staff row there, or platform admin (every hotel). null = nothing.
+async function membership(email: string, hotelId: string): Promise<{ name: string } | null> {
+  const [{ data: row }, { data: admin }] = await Promise.all([
+    db.from("staff_users").select("name").eq("hotel_id", hotelId).ilike("email", likeEsc(email)).maybeSingle(),
+    db.from("platform_admins").select("email").eq("email", email).maybeSingle(),
+  ]);
+  if (row) return { name: row.name || email };
+  return admin ? { name: email } : null;
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origin) });
@@ -30,21 +42,19 @@ Deno.serve(async (req) => {
   const { data: auth, error: authErr } = await db.auth.getUser(token);
   const email = auth?.user?.email?.toLowerCase();
   if (authErr || !email) return json({ error: "Please sign in again." }, 401, origin);
-  const { data: staff } = await db.from("staff_users").select("email").ilike("email", email).maybeSingle();
-  if (!staff) return json({ error: "This account is not on the staff list." }, 403, origin);
-
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: "Send JSON." }, 400, origin); }
   const escalation_id = String(body.escalation_id ?? "");
   if (!/^[0-9a-f-]{36}$/i.test(escalation_id)) return json({ error: "Bad question id." }, 400, origin);
 
-  const { data: esc } = await db.from("escalations").select("guest_chat_id").eq("id", escalation_id).eq("status", "open").maybeSingle();
+  const { data: esc } = await db.from("escalations").select("guest_chat_id,hotel_id").eq("id", escalation_id).eq("status", "open").maybeSingle();
   if (!esc) return json({ ok: true, sent: false }, 200, origin);                    // already answered: nothing to show
+  if (!(await membership(email, esc.hotel_id))) return json({ error: "This account is not on the staff list." }, 403, origin);   // staff of THAT hotel only
 
   try {
     await fetch(TYPING_URL, {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ chat_id: esc.guest_chat_id }),
+      body: JSON.stringify({ chat_id: esc.guest_chat_id, hotel_id: esc.hotel_id }),
       signal: AbortSignal.timeout(8000),
     });
   } catch (e) { console.error("typing failed", String(e)); }

@@ -21,6 +21,18 @@ const cors = (origin: string | null) => ({
 const json = (body: unknown, status: number, origin: string | null) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...cors(origin) } });
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const likeEsc = (s: string) => s.replace(/[\\%_]/g, "\\$&");     // an email may contain _ or %, which ilike would treat as wildcards
+// What this signed-in person may do in one hotel: their staff row there, or platform admin (every hotel). null = nothing.
+async function membership(email: string, hotelId: string): Promise<{ name: string; role: string } | null> {
+  const [{ data: row }, { data: admin }] = await Promise.all([
+    db.from("staff_users").select("name,role").eq("hotel_id", hotelId).ilike("email", likeEsc(email)).maybeSingle(),
+    db.from("platform_admins").select("email").eq("email", email).maybeSingle(),
+  ]);
+  if (admin) return { name: row?.name || email, role: "admin" };
+  return row ? { name: row.name || email, role: row.role } : null;
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origin) });
@@ -31,19 +43,21 @@ Deno.serve(async (req) => {
   const email = auth?.user?.email?.toLowerCase();
   if (authErr || !email) return json({ error: "Please sign in again." }, 401, origin);
 
-  const { data: staff } = await db.from("staff_users").select("name").ilike("email", email).maybeSingle();
-  if (!staff) return json({ error: "This account is not on the staff list." }, 403, origin);
-
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: "Send JSON." }, 400, origin); }
   const escalation_id = String(body.escalation_id ?? "");
   const answer = String(body.answer ?? "").trim().slice(0, 1500);
   if (!/^[0-9a-f-]{36}$/i.test(escalation_id) || !answer) return json({ error: "Write a reply first." }, 400, origin);
 
+  // The question says which hotel it belongs to; the caller must be staff of THAT hotel (or a platform admin).
+  const { data: esc } = await db.from("escalations").select("hotel_id").eq("id", escalation_id).maybeSingle();
+  const staff = esc ? await membership(email, esc.hotel_id) : null;
+  if (!esc || !staff) return json({ error: "This account is not on the staff list." }, 403, origin);       // same answer whether it exists or not
+
   try {
     const r = await fetch(REPLY_URL, {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ escalation_id, answer, learn: body.learn === true, by: staff.name || email }),
+      body: JSON.stringify({ escalation_id, hotel_id: esc.hotel_id, answer, learn: body.learn === true && staff.role !== "staff", by: staff.name || email }),   // only a manager or above may teach the bot an answer
       signal: AbortSignal.timeout(20000),
     });
     const out = await r.json().catch(() => ({}));

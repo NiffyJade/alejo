@@ -548,3 +548,19 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 .cols-r { grid-template-columns: minmax(180px, 2fr) 110px 120px 150px; }
 @media (max-width: 600px) { .cols-r > * { grid-column: auto; } }
 a.pill { text-decoration: none; }
+
+/* ---------- Team ---------- */
+.team-cols { grid-template-columns: minmax(0, 1.6fr) 150px auto; }
+.team-cols .mact { justify-content: flex-end; }
+.team-add { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 150px auto; gap: 12px; align-items: end; margin-top: 8px; }
+.team-roles { display: grid; grid-template-columns: max-content 1fr; gap: 8px 20px; font-size: 14px; margin-top: 8px; }
+.team-roles dt { font-weight: 600; }
+.team-roles dd { color: var(--muted); }
+.minput.secret { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 20px; letter-spacing: 0.06em; height: 48px; text-align: center; }
+@media (max-width: 760px) {
+  .team-cols { grid-template-columns: minmax(0, 1fr); row-gap: 8px; }
+  .team-cols .mact { justify-content: flex-start; }
+  .team-add { grid-template-columns: minmax(0, 1fr); }
+  .team-roles { grid-template-columns: 1fr; gap: 2px; }
+  .team-roles dd { margin-bottom: 10px; }
+}

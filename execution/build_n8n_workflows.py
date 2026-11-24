@@ -23,8 +23,8 @@ ROOT = Path(__file__).resolve().parent.parent
 CRED_FILE = ROOT / ".tmp" / "n8n_credentials.json"
 
 SB = "https://uavlejanscnsvjdxfslh.supabase.co/rest/v1"
-HOTEL_NAME = "BrightSide Hotel"
 COHERE_MODEL = "command-a-plus-05-2026"
+SUFFIX = os.environ.get("WF_SUFFIX", "")      # build a parallel copy next to the live workflows (names and webhook paths get this suffix)
 
 
 def load_env():
@@ -37,8 +37,11 @@ def load_env():
 
 
 ENV = load_env()
-STAFF_CHAT_ID = int(ENV["TELEGRAM_STAFF_CHAT_ID"])      # the staff Telegram group (from .env)
-BOT_USERNAME = ENV["TELEGRAM_BOT_USERNAME"]                # the bot guests open, without the @ (from .env)
+# Alejo's OWN alerts (a new demo request) go to the platform owner's group, through the bot of this hotel (the original BrightSide one).
+PLATFORM_HOTEL_ID = "00000000-0000-4000-8000-000000000001"
+PLATFORM_STAFF_CHAT_ID = int(ENV["TELEGRAM_STAFF_CHAT_ID"])
+PROXY = ENV["SUPABASE_URL"] + "/functions/v1/telegram-proxy/" + ENV["TELEGRAM_PROXY_SECRET"]
+STAFF = "{{STAFF}}"          # marker: "the staff group of the hotel this run belongs to"
 
 
 def api(method, path, body=None):
@@ -91,8 +94,9 @@ C = ensure_credentials()
 
 # ---------------------------------------------------------------- node helpers
 class WF:
-    def __init__(self, name):
-        self.name, self.nodes, self.conns = name, [], {}
+    def __init__(self, name, hx=None):
+        self.name, self.nodes, self.conns = name + SUFFIX, [], {}
+        self.hx = hx          # JavaScript expression that gives the hotel ({ id, name, timezone, staff_chat_id, bot_username }) of this run
         self.fast = False      # latency-sensitive workflows (guest chat, phone) do not save execution state after every node
 
     def add(self, name, type_, params, pos, ver=1, creds=None, **extra):
@@ -128,10 +132,38 @@ def booking_js(filename):
     folder = ROOT / "execution" / "telegram_booking_js"
     return (folder / filename).read_text(encoding="utf-8") \
         .replace("// __LANG__", (folder / "lang.js").read_text(encoding="utf-8")) \
-        .replace("__HOTEL__", HOTEL_NAME).replace("__MODEL__", COHERE_MODEL).replace("__STAFF__", str(STAFF_CHAT_ID))
+        .replace("__MODEL__", COHERE_MODEL)
 
 
-def http(w, name, method, url, pos, body=None, prefer=None, always=False, once=False, cred="sb", **extra):
+# ---- hotel scoping -------------------------------------------------------------------------------------------------------
+# Every call to the database names its hotel: reads/updates/deletes carry &hotel_id=eq.<hotel>, inserts carry hotel_id in the body,
+# database functions get p_hotel. http() adds all of that itself, so a call site cannot forget it (audit() fails the build if one does).
+def _inject(body, key, hx):
+    """Put `key: <hotel id>` into a JSON.stringify(...) body expression."""
+    m = re.fullmatch(r"=\{\{ JSON\.stringify\((.*)\) \}\}", body, re.S)
+    if not m:
+        raise ValueError("cannot scope body: " + body[:80])
+    inner, hid = m.group(1).strip(), hx + ".id"
+    if inner == "{}":
+        return "={{ JSON.stringify({ " + key + ": " + hid + " }) }}"
+    if inner.startswith("{ "):
+        return "={{ JSON.stringify({ " + key + ": " + hid + ", " + inner[2:] + ") }}"
+    if inner.startswith("["):
+        return "={{ JSON.stringify(" + inner + ".map(r => ({ ..." + "r, " + key + ": " + hid + " }))) }}"
+    return "={{ JSON.stringify({ ..." + inner + ", " + key + ": " + hid + " }) }}"
+
+
+def http(w, name, method, url, pos, body=None, prefer=None, always=False, once=False, cred="sb", scope=True, **extra):
+    if cred == "sb" and scope and url.startswith("=" + SB):
+        hid = "{{ " + w.hx + ".id }}"
+        if "/rpc/" in url:
+            if body is not None:
+                body = _inject(body, "p_hotel", w.hx)
+        elif method in ("GET", "PATCH", "DELETE"):
+            url += ("&" if "?" in url else "?") + "hotel_id=eq." + hid
+        elif method == "POST" and body is not None:
+            body = _inject(body, "hotel_id", w.hx)
+        url = url.replace("?on_conflict=chat_id", "?on_conflict=hotel_id,chat_id").replace("?on_conflict=key", "?on_conflict=hotel_id,key")
     p = {"method": method, "url": url, "options": {"timeout": 30000}}
     if cred == "sb":
         p.update(authentication="predefinedCredentialType", nodeCredentialType="supabaseApi")
@@ -167,52 +199,125 @@ def if_node(w, name, left, type_, op, pos, right=None):
         "options": {}}, pos, ver=2.2)
 
 
-def plain(text):
-    """Telegram texts are sent as HTML and every dynamic {{ expression }} is HTML-escaped, so guest and staff text is shown exactly as
-    written. (n8n's default is Markdown, which rejects a message containing _ * [ or ` with "can't parse entities": the reply never arrives.)"""
-    esc = ".replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')"
-    h = lambda t: t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+def tmpl_js(text, html=False):
+    """n8n template text ("=Hello {{ expr }}!") -> one JavaScript expression. With html=True the literal parts and every dynamic value are
+    HTML-escaped, because Telegram texts are sent as HTML: guest and staff text then shows exactly as written. (Telegram's Markdown mode
+    rejects a message containing _ * [ or ` with "can't parse entities": the reply never arrives.)"""
+    h = (lambda t: t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")) if html else (lambda t: t)
+    esc = ".replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')" if html else ""
     if not text.startswith("="):
-        return h(text)
+        return json.dumps(h(text), ensure_ascii=False)
     body, out, last = text[1:], [], 0
     for m in re.finditer(r"\{\{(.*?)\}\}", body, re.S):
-        out += [h(body[last:m.start()]), "{{ String((" + m.group(1).strip() + ") ?? '')" + esc + " }}"]
+        if body[last:m.start()]:
+            out.append(json.dumps(h(body[last:m.start()]), ensure_ascii=False))
+        out.append("String((" + m.group(1).strip() + ") ?? '')" + esc)
         last = m.end()
-    out.append(h(body[last:]))
-    return "=" + "".join(out)
+    if body[last:]:
+        out.append(json.dumps(h(body[last:]), ensure_ascii=False))
+    return " + ".join(out) if out else "''"
+
+
+def chat_js(w, chat):
+    if chat == STAFF:
+        return w.hx + ".staff_chat_id"
+    if chat.startswith("={{"):
+        return chat[3:-2].strip()
+    return chat if re.fullmatch(r"-?\d+", chat) else json.dumps(chat)
+
+
+def js_obj(o):
+    """A JSON-able value as a JavaScript literal that never contains two closing braces in a row (n8n would end the expression there)."""
+    t = json.dumps(o, ensure_ascii=False, separators=(", ", ": "))
+    return t.replace("}}", "} }")
 
 
 # The always-visible buttons under the Telegram chat box (a reply keyboard stays until it is replaced)
 MENU_ROWS = [["📋 My booking", "🛏 Check availability"], ["✅ Check in", "🚪 Check out"]]
+MENU_MARKUP = {"keyboard": [[{"text": t} for t in row] for row in MENU_ROWS], "resize_keyboard": True}
+PHONE_MARKUP = {"keyboard": [[{"text": "📱 Share my phone number", "request_contact": True}]], "resize_keyboard": True, "one_time_keyboard": True}
 
 
-def menu_keyboard():
-    return {"replyMarkup": "replyKeyboard",
-            "replyKeyboard": {"rows": [{"row": {"buttons": [{"text": t, "additionalFields": {}} for t in row]}} for row in MENU_ROWS]},
-            "replyKeyboardOptions": {"resize_keyboard": True}}
+def tg_call(w, name, method, fields, pos, **extra):
+    """One Telegram Bot API call, sent through the relay as the hotel of this run (the relay holds the hotel's bot token).
+    `fields` maps each Telegram parameter to a JavaScript expression. The response is Telegram's own: { ok, result: { message_id } }."""
+    body = "={{ JSON.stringify({ " + ", ".join(f"{k}: {v}" for k, v in fields.items()) + " }) }}"
+    assert body.count("}}") == 1, "an inner }} would end the n8n expression early: " + name
+    p = {"method": "POST", "url": "=" + PROXY + "/hotel/{{ " + w.hx + ".id }}/" + method,
+         "sendBody": True, "specifyBody": "json", "jsonBody": body, "options": {"timeout": 30000}}
+    return w.add(name, "n8n-nodes-base.httpRequest", p, pos, ver=4.2, **extra)
 
 
-def tg_send(w, name, chat, text, pos, button=None, menu=False, **extra):
-    p = {"resource": "message", "operation": "sendMessage", "chatId": chat, "text": plain(text),
-         "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}
-    if menu:
-        p.update(menu_keyboard())
-    if button:
-        p["replyMarkup"] = "inlineKeyboard"
-        p["inlineKeyboard"] = {"rows": [{"row": {"buttons": [
-            {"text": button[0], "additionalFields": {"callback_data": button[1]}}]}}]}
-    return w.add(name, "n8n-nodes-base.telegram", p, pos, ver=1.2, creds=C["tg"], **extra)
+def tg_send(w, name, chat, text, pos, button=None, menu=False, markup=None, **extra):
+    """sendMessage as HTML. `button` = (label, callback) puts one inline button under it; menu=True restores the menu keyboard;
+    `markup` is a ready-made reply_markup JavaScript expression (for the custom keyboards)."""
+    f = {"chat_id": chat_js(w, chat), "text": tmpl_js(text, html=True), "parse_mode": "'HTML'"}
+    if markup:
+        f["reply_markup"] = markup
+    elif menu:
+        f["reply_markup"] = js_obj(MENU_MARKUP)
+    elif button:
+        f["reply_markup"] = "{ inline_keyboard: [ [ { text: " + tmpl_js(button[0]) + ", callback_data: " + tmpl_js(button[1]) + " } ] ] }"
+    return tg_call(w, name, "sendMessage", f, pos, **extra)
+
+
+def tg_ack(w, name, pos, **extra):
+    """Stop the spinner on a tapped inline button."""
+    return tg_call(w, name, "answerCallbackQuery", {"callback_query_id": "$json.query_id"}, pos, **extra)
+
+
+def tg_typing(w, name, chat, pos, **extra):
+    return tg_call(w, name, "sendChatAction", {"chat_id": chat, "action": "'typing'"}, pos, **extra)
+
+
+def HN(w):
+    """The hotel's name inside an n8n template text."""
+    return "{{ " + w.hx + ".name }}"
+
+
+UNSCOPED_OK = {"Find hotel", "List active hotels", "Load hotel"}      # these ARE the lookups that find the hotel
+
+
+def audit(w):
+    """Refuse to publish a workflow that could mix hotels: every database call must name its hotel, and no node may use the old shared bot."""
+    bad = []
+    for n in w.nodes:
+        t, p = n["type"], n["parameters"]
+        if t in ("n8n-nodes-base.telegram", "n8n-nodes-base.telegramTrigger"):
+            bad.append(n["name"] + ": uses the shared Telegram credential")
+        if t == "n8n-nodes-base.httpRequest" and str(p.get("url", "")).startswith("=" + SB):
+            blob = str(p.get("url")) + str(p.get("jsonBody", ""))
+            if "hotel_id" not in blob and "p_hotel" not in blob and n["name"] not in UNSCOPED_OK:
+                bad.append(n["name"] + ": database call without a hotel")
+    if bad:
+        sys.exit("AUDIT FAILED for " + w.name + ":\n  " + "\n  ".join(bad))
 
 
 # ============================================================ 1. Telegram Bot
 def telegram_bot():
-    w = WF("Hotel Guest Journey - Telegram Bot")
+    w = WF("Hotel Guest Journey - Telegram Bot", hx="$('Classify').first().json.hotel")
     w.fast = True
-    trig = w.add("Telegram Trigger", "n8n-nodes-base.telegramTrigger",
-                 {"updates": ["message", "callback_query"], "additionalFields": {}}, (0, 400), ver=1.2,
-                 creds=C["tg"], webhookId=str(uuid.uuid4()))
+    # ONE address serves every hotel's bot. Telegram sends each bot's own secret in a header (set when the bot's webhook is registered by
+    # hotel_admin.py), so the secret both authenticates the update and says which hotel it is for. Unknown secret = ignored.
+    hook = w.add("Telegram webhook", "n8n-nodes-base.webhook",
+                 {"httpMethod": "POST", "path": tg_path(), "responseMode": "onReceived", "options": {}}, (-660, 400), ver=2.1,
+                 webhookId=str(uuid.uuid4()))
+    upd = code(w, "Update", """
+const j = $input.first().json;
+return [{ json: { update: j.body || {}, secret: String((j.headers || {})['x-telegram-bot-api-secret-token'] || '') } }];
+""", (-440, 400))
+    fh = http(w, "Find hotel", "POST", "=" + SB + "/rpc/hotel_by_secret", (-220, 400),
+              body="={{ JSON.stringify({ p_kind: 'telegram', p_secret: $json.secret }) }}", always=True, scope=False)
+    known = if_node(w, "Hotel known?", "={{ $json.found }}", "boolean", "true", (-220, 520))
+    attach = code(w, "Attach hotel", """
+const u = $('Update').first().json.update || {};
+return [{ json: { ...u, hotel: $input.first().json.hotel } }];
+""", (0, 400))
     cls = code(w, "Classify", booking_js("classify.js"), (220, 400))
-    w.link(trig, cls)
+    w.chain(hook, upd, fh)
+    w.link(fh, known)
+    w.link(known, attach, 0)
+    w.link(attach, cls)
 
     rules = []
     for t in ("start", "callback", "staff_reply", "guest_message", "contact", "booking_cb", "hello", "menu", "mybooking", "rating"):
@@ -232,7 +337,7 @@ def telegram_bot():
                 prefer="return=minimal")
     welcome = tg_send(w, "Welcome message", "={{ $('Classify').first().json.chat_id }}",
                       "=Welcome, {{ $('Find booking by token').first().json.guests.name }}! 🎉\n\n"
-                      f"I'm the virtual receptionist for {HOTEL_NAME}. You're now linked to your booking "
+                      "I'm the virtual receptionist for " + HN(w) + ". You're now linked to your booking "
                       "({{ $('Find booking by token').first().json.room_type || 'room' }}, "
                       "{{ $('Find booking by token').first().json.check_in }} to {{ $('Find booking by token').first().json.check_out }}).\n\n"
                       "I'll remind you before you arrive and send your private stay code when it's time to check in. "
@@ -266,7 +371,7 @@ def telegram_bot():
                  body="={{ JSON.stringify($json.rpc) }}", always=True, once=True, onError="continueRegularOutput")
     comp = code(w, "Compose reply", booking_js("compose_reply.js"), (3120, -60))
     esc = if_node(w, "Needs staff?", "={{ $json.escalate }}", "boolean", "true", (3340, -60))
-    post_staff = tg_send(w, "Alert staff group", str(STAFF_CHAT_ID),
+    post_staff = tg_send(w, "Alert staff group", STAFF,
                          "={{ $json.alert_title }}\nGuest: {{ $json.guest_name }}{{ $json.room ? ' (Room ' + $json.room + ')' : '' }}\n"
                          "Message: \"{{ $json.question }}\"\n"
                          "{{ $json.ai_answered ? 'AI replied: ' + $json.reply : 'AI could not answer from the knowledge base.' }}\n\n"
@@ -285,22 +390,10 @@ def telegram_bot():
     style = w.add("Reply style", "n8n-nodes-base.switch", {"rules": {"values": style_rules}, "options": {"fallbackOutput": 0}},
                   (4000, -60), ver=3.4)
     send_text = tg_send(w, "Send guest reply", "={{ " + CR + ".chat_id }}", "={{ " + CR + ".reply }}", (4220, -160), menu=True)
-    send_confirm = w.add("Send booking summary", "n8n-nodes-base.telegram", {
-        "resource": "message", "operation": "sendMessage", "chatId": "={{ " + CR + ".chat_id }}",
-        "text": plain("={{ " + CR + ".reply }}"),
-        "replyMarkup": "inlineKeyboard",
-        "inlineKeyboard": {"rows": [{"row": {"buttons": [
-            {"text": "✅ Confirm booking", "additionalFields": {"callback_data": "=bkok:{{ " + CR + ".confirm_data }}"}},
-            {"text": "Cancel", "additionalFields": {"callback_data": "bkno:x"}}]}}]},
-        "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}, (4220, -60), ver=1.2, creds=C["tg"])
-    send_phone = w.add("Ask for phone number", "n8n-nodes-base.telegram", {
-        "resource": "message", "operation": "sendMessage", "chatId": "={{ " + CR + ".chat_id }}",
-        "text": plain("={{ " + CR + ".reply }}"),
-        "replyMarkup": "replyKeyboard",
-        "replyKeyboard": {"rows": [{"row": {"buttons": [
-            {"text": "📱 Share my phone number", "additionalFields": {"request_contact": True}}]}}]},
-        "replyKeyboardOptions": {"resize_keyboard": True, "one_time_keyboard": True},
-        "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}, (4220, 40), ver=1.2, creds=C["tg"])
+    send_confirm = tg_send(w, "Send booking summary", "={{ " + CR + ".chat_id }}", "={{ " + CR + ".reply }}", (4220, -60),
+                           markup="{ inline_keyboard: [ [ { text: '✅ Confirm booking', callback_data: 'bkok:' + " + CR + ".confirm_data }, "
+                                  "{ text: 'Cancel', callback_data: 'bkno:x' } ] ] }")
+    send_phone = tg_send(w, "Ask for phone number", "={{ " + CR + ".chat_id }}", "={{ " + CR + ".reply }}", (4220, 40), markup=js_obj(PHONE_MARKUP))
     dsave = if_node(w, "Draft to save?", "={{ " + CR + ".save_draft }}", "boolean", "true", (4440, -60))
     sdraft = http(w, "Save draft", "POST", "=" + SB + "/booking_drafts?on_conflict=chat_id", (4660, -120),
                   prefer="resolution=merge-duplicates,return=minimal",
@@ -324,7 +417,7 @@ def telegram_bot():
     # A guest chasing an open item ("any update?") does not create a second item: the existing one is nudged instead.
     chasing = if_node(w, "Chasing an open item?", "={{ $json.chase }}", "boolean", "true", (3450, -60))
     due = if_node(w, "Alert staff again?", "={{ $json.chase_alert }}", "boolean", "true", (3560, 120))
-    chase_alert = tg_send(w, "Alert staff (chasing)", str(STAFF_CHAT_ID), "={{ $json.chase_text }}", (3780, 120))
+    chase_alert = tg_send(w, "Alert staff (chasing)", STAFF, "={{ $json.chase_text }}", (3780, 120))
     mark_chase = http(w, "Mark chased", "PATCH", "=" + SB + "/escalations?id=eq.{{ " + CR + ".chase_id }}", (4000, 120),
                       body="={{ JSON.stringify({ chase_count: " + CR + ".chase_next, last_chased_at: new Date().toISOString() }) }}",
                       prefer="return=minimal", onError="continueRegularOutput")
@@ -350,9 +443,7 @@ def telegram_bot():
     w.link(sdraft, log)
 
     # ---- CALLBACK: Check in / Check out buttons
-    ack = w.add("Acknowledge tap", "n8n-nodes-base.telegram",
-                {"resource": "callback", "operation": "answerQuery", "queryId": "={{ $json.query_id }}",
-                 "additionalFields": {}}, (700, 300), ver=1.2, creds=C["tg"])
+    ack = tg_ack(w, "Acknowledge tap", (700, 300))
     lb = http(w, "Load booking", "GET",
               "=" + SB + "/bookings?id=eq.{{ $('Classify').first().json.booking_id }}&select=id,room_number,room_type,check_in,check_out,status,stay_code,guests(name,telegram_chat_id)",
               (920, 300), always=True)
@@ -381,14 +472,8 @@ def telegram_bot():
     haveb = if_node(w, "Has booking?", "={{ $json.markup }}", "string", "equals", (1360, 1950), right="menu")
     my_send = tg_send(w, "Send my booking", "={{ $('Classify').first().json.chat_id }}", "={{ $('Compose my booking').first().json.text }}",
                       (1580, 1900), menu=True)
-    my_phone = w.add("Ask for phone number (my booking)", "n8n-nodes-base.telegram", {
-        "resource": "message", "operation": "sendMessage", "chatId": "={{ $('Classify').first().json.chat_id }}",
-        "text": plain("={{ $('Compose my booking').first().json.text }}"),
-        "replyMarkup": "replyKeyboard",
-        "replyKeyboard": {"rows": [{"row": {"buttons": [
-            {"text": "📱 Share my phone number", "additionalFields": {"request_contact": True}}]}}]},
-        "replyKeyboardOptions": {"resize_keyboard": True, "one_time_keyboard": True},
-        "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}, (1580, 2000), ver=1.2, creds=C["tg"])
+    my_phone = tg_send(w, "Ask for phone number (my booking)", "={{ $('Classify').first().json.chat_id }}",
+                       "={{ $('Compose my booking').first().json.text }}", (1580, 2000), markup=js_obj(PHONE_MARKUP))
     w.link(sw, fmb, 7)
     w.link(sw, fmb, 8)
     w.chain(fmb, shown)
@@ -402,9 +487,7 @@ def telegram_bot():
     # ---- RATING: the 1-5 buttons under the thank-you after checkout. record_rating (database) stores it and, for 3 or less, opens ONE
     # complaint item for the stay; the guest is answered first, then staff are alerted and the alert's message id is saved on the item so
     # a reply in the staff group reaches the guest. If the guest's reply cannot be delivered the alert still goes out.
-    ack_r = w.add("Acknowledge rating tap", "n8n-nodes-base.telegram",
-                  {"resource": "callback", "operation": "answerQuery", "queryId": "={{ $json.query_id }}", "additionalFields": {}},
-                  (700, 2300), ver=1.2, creds=C["tg"], onError="continueRegularOutput")
+    ack_r = tg_ack(w, "Acknowledge rating tap", (700, 2300), onError="continueRegularOutput")
     rec = http(w, "Record rating", "POST", "=" + SB + "/rpc/record_rating", (920, 2300),
                body="={{ JSON.stringify({ p_booking_id: $('Classify').first().json.booking_id, p_chat_id: $('Classify').first().json.chat_id, "
                     "p_rating: $('Classify').first().json.rating }) }}", always=True, onError="continueRegularOutput")
@@ -412,7 +495,7 @@ def telegram_bot():
     rsend = tg_send(w, "Send rating reply", "={{ $('Classify').first().json.chat_id }}", "={{ $('Rating reply').first().json.text }}", (1360, 2300),
                     menu=True, onError="continueRegularOutput")
     ralert_if = if_node(w, "Low score to alert?", "={{ $('Rating reply').first().json.alert }}", "string", "notEmpty", (1580, 2300))
-    ralert = tg_send(w, "Alert staff (low rating)", str(STAFF_CHAT_ID), "={{ $('Rating reply').first().json.alert }}", (1800, 2240), onError="continueRegularOutput")
+    ralert = tg_send(w, "Alert staff (low rating)", STAFF, "={{ $('Rating reply').first().json.alert }}", (1800, 2240), onError="continueRegularOutput")
     rpatch = http(w, "Save alert message id", "PATCH", "=" + SB + "/escalations?id=eq.{{ $('Rating reply').first().json.escalation_id }}", (2020, 2240),
                   body="={{ JSON.stringify({ staff_message_id: $json.result ? $json.result.message_id : $json.message_id }) }}",
                   prefer="return=minimal", onError="continueRegularOutput")
@@ -436,7 +519,7 @@ def telegram_bot():
                    prefer="resolution=merge-duplicates,return=minimal",
                    body="={{ JSON.stringify({ id: 'staff-' + $('Find open escalation').first().json.id, category: 'staff', "
                         "question: $('Find open escalation').first().json.question, answer: $('Classify').first().json.text, source: 'staff' }) }}")
-    done = tg_send(w, "Confirm to staff", str(STAFF_CHAT_ID),
+    done = tg_send(w, "Confirm to staff", STAFF,
                    "={{ $('Classify').first().json.learn ? '✅ Sent to the guest and saved to the knowledge base.' : '✅ Sent to the guest.' }}",
                    (2020, 700))
     w.link(sw, fe, 2)
@@ -483,9 +566,7 @@ def telegram_bot():
     w.link(mid2, pno, 1)
 
     # ---- BOOKING BUTTONS: Confirm / Cancel under a booking summary
-    ack2 = w.add("Acknowledge booking tap", "n8n-nodes-base.telegram",
-                 {"resource": "callback", "operation": "answerQuery", "queryId": "={{ $json.query_id }}", "additionalFields": {}},
-                 (700, 1500), ver=1.2, creds=C["tg"], onError="continueRegularOutput")
+    ack2 = tg_ack(w, "Acknowledge booking tap", (700, 1500), onError="continueRegularOutput")
     ldc = http(w, "Load draft (confirm)", "GET", "=" + SB + "/booking_drafts?chat_id=eq.{{ $('Classify').first().json.chat_id }}&select=*",
                (920, 1500), always=True)
     chk = code(w, "Check confirm", booking_js("check_confirm.js"), (1140, 1500))
@@ -500,7 +581,7 @@ def telegram_bot():
     bres = code(w, "Booking result", booking_js("booking_result.js"), (1800, 1400))
     bsend = tg_send(w, "Send booking result", "={{ $('Classify').first().json.chat_id }}", "={{ $('Booking result').first().json.text }}", (2020, 1400), menu=True)
     bhas = if_node(w, "Alert staff?", "={{ $('Booking result').first().json.staff }}", "string", "notEmpty", (2240, 1400))
-    balert = tg_send(w, "Alert staff (booking)", str(STAFF_CHAT_ID), "={{ $('Booking result').first().json.staff }}", (2460, 1340),
+    balert = tg_send(w, "Alert staff (booking)", STAFF, "={{ $('Booking result').first().json.staff }}", (2460, 1340),
                      onError="continueRegularOutput")
     csend = tg_send(w, "Send cancelled", "={{ $('Classify').first().json.chat_id }}",
                     "={{ $('Check confirm').first().json.text }}", (1580, 1560))
@@ -519,7 +600,7 @@ def telegram_bot():
 
     # ---- HELLO: someone opened the bot without a booking link
     hello = tg_send(w, "Say hello", "={{ $json.chat_id }}",
-                    f"Hello! I'm the virtual receptionist for {HOTEL_NAME}. 👋\n\n"
+                    "=Hello! I'm the virtual receptionist for " + HN(w) + ". 👋\n\n"
                     "I can check which rooms are free for your dates, book a room for you, and answer questions about the hotel.\n\n"
                     "Try: \"Do you have a room this Friday to Sunday?\"\n\n"
                     "The buttons below are always here: My booking (your reference), Check availability, Check in and Check out.", (700, 1850), menu=True)
@@ -529,19 +610,24 @@ def telegram_bot():
 
 # ============================================================ 2. Scheduler
 def scheduler():
-    w = WF("Hotel Guest Journey - Scheduler")
-    trig = w.add("Every 15 minutes", "n8n-nodes-base.scheduleTrigger",
-                 {"rule": {"interval": [{"field": "minutes", "minutesInterval": 15}]}}, (0, 300), ver=1.2)
-    now = code(w, "Now (Lagos)", """
-const now = new Date(), lagos = new Date(now.getTime() + 3600 * 1000);
-const iso = d => d.toISOString().slice(0, 10);
-return [{ json: { now: now.toISOString(), today: iso(lagos), tomorrow: iso(new Date(lagos.getTime() + 86400000)),
-  hour: lagos.getUTCHours(), weekday: lagos.getUTCDay(), cutoff: new Date(now.getTime() - 30 * 60000).toISOString(),
+    """ONE HOTEL's scheduled jobs. The parent ("Hotel Guest Journey - Scheduler") starts this once per active hotel every 15 minutes, so
+    each run sees exactly one hotel: its clock, its settings, its bookings, its staff group."""
+    w = WF("Hotel Guest Journey - Scheduler (one hotel)", hx="$('Now (hotel time)').first().json.hotel")
+    trig = w.add("Run for one hotel", "n8n-nodes-base.executeWorkflowTrigger", {"inputSource": "passthrough"}, (0, 300), ver=1.1)
+    now = code(w, "Now (hotel time)", """
+const h = $input.first().json;                       // { id, slug, name, timezone, staff_chat_id } handed over by the parent
+const tz = h.timezone || 'Africa/Lagos', now = new Date();
+const today = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(now);                                  // YYYY-MM-DD on the hotel's clock
+const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', hourCycle: 'h23' }).format(now));
+const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(now));
+const tomorrow = new Date(Date.parse(today + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
+return [{ json: { hotel: { id: h.id, slug: h.slug, name: h.name, timezone: tz, staff_chat_id: h.staff_chat_id }, now: now.toISOString(), today, tomorrow, hour, weekday,
+  cutoff: new Date(now.getTime() - 30 * 60000).toISOString(),
   followBefore: new Date(now.getTime() - 90 * 60000).toISOString(), followAfter: new Date(now.getTime() - 5 * 3600000).toISOString() } }];
 """, (220, 300))
     st = http(w, "Get settings", "GET", "=" + SB + "/hotel_settings?select=key,value", (440, 300))
     ctx = code(w, "Context", """
-const t = $('Now (Lagos)').first().json;
+const t = $('Now (hotel time)').first().json;
 const settings = Object.fromEntries($input.all().map(i => [i.json.key, (i.json.value || '').trim()]));
 return [{ json: { ...t, settings, REMINDER_HOUR: 10, CHECKOUT_HOUR: 8, ARRIVAL_CHECK_HOUR: 18, ARRIVAL_CHECK_LAST_HOUR: 22 } }];
 """, (660, 300))
@@ -555,7 +641,7 @@ return [{ json: { ...t, settings, REMINDER_HOUR: 10, CHECKOUT_HOUR: 8, ARRIVAL_C
     ca = code(w, "Compose reminders", f"""
 const s = $('Context').first().json.settings;
 return $input.all().filter(i => i.json.id).map(i => ({{ json: {{ booking_id: i.json.id, chat_id: i.json.guests.telegram_chat_id,
-  text: `Hello ${{i.json.guests.name}}! 👋 Your stay at {HOTEL_NAME} starts tomorrow.\\n\\n` +
+  text: `Hello ${{i.json.guests.name}}! 👋 Your stay at ${{$('Context').first().json.hotel.name}} starts tomorrow.\\n\\n` +
     `Check-in is from ${{s.CHECKIN_TIME || 'the afternoon'}}. Please bring a valid photo ID (NIN slip, passport, driver's licence or voter's card).\\n\\n` +
     `When you arrive, tap Check in below to get your private stay code. Reply here if you need directions, an airport pickup or anything else.` }} }}));
 """, (1340, 0))
@@ -599,12 +685,8 @@ return $input.all().filter(i => i.json.id).map(i => ({ json: { booking_id: i.jso
     # The thank-you now carries five rating buttons (1 to 5). Taps are handled by the guest bot (route "rating"); a score of 3 or less
     # becomes a complaint item. The public review link stays in the text for EVERYONE (sending only happy guests to a review site is
     # "review gating", which Google forbids).
-    tc = w.add("Send thank-you", "n8n-nodes-base.telegram", {
-        "resource": "message", "operation": "sendMessage", "chatId": "={{ $json.chat_id }}", "text": plain("={{ $json.text }}"),
-        "replyMarkup": "inlineKeyboard",
-        "inlineKeyboard": {"rows": [{"row": {"buttons": [
-            {"text": f"⭐ {k}", "additionalFields": {"callback_data": "=rate:" + str(k) + ":{{ $json.booking_id }}"}} for k in range(1, 6)]}}]},
-        "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}, (1560, 600), ver=1.2, creds=C["tg"], onError="continueErrorOutput")
+    tc = tg_send(w, "Send thank-you", "={{ $json.chat_id }}", "={{ $json.text }}", (1560, 600), onError="continueErrorOutput",
+                 markup="{ inline_keyboard: [ [ " + ", ".join("{ text: '⭐ " + str(k) + "', callback_data: 'rate:" + str(k) + ":' + $json.booking_id }" for k in range(1, 6)) + " ] ] }")
     mc = http(w, "Mark thank-you sent", "PATCH", "=" + SB + "/bookings?id=eq.{{ $('Compose thank-yous').item.json.booking_id }}", (1780, 600),
               body="={{ JSON.stringify({ thanks_sent_at: new Date().toISOString(), rating_prompted_at: new Date().toISOString() }) }}", prefer="return=minimal")
     w.chain(ctx, close, qc, cc, tc)
@@ -619,7 +701,7 @@ return $input.all().filter(i => i.json.id).map(i => ({ json: { booking_id: i.jso
     cf = code(w, "Compose arrival checks", f"""
 const s = $('Context').first().json.settings;
 return $input.all().filter(i => i.json.id).map(i => ({{ json: {{ booking_id: i.json.id, chat_id: i.json.guests.telegram_chat_id,
-  text: `Good evening ${{i.json.guests.name}}! 🌙 We are looking forward to welcoming you to {HOTEL_NAME} today.\\n\\n` +
+  text: `Good evening ${{i.json.guests.name}}! 🌙 We are looking forward to welcoming you to ${{$('Context').first().json.hotel.name}} today.\\n\\n` +
     `If you will be arriving late, just reply with roughly what time and I will let our team know. ` +
     `When you arrive, tap Check in below to get your private stay code.` }} }}));
 """, (1340, 1500))
@@ -644,14 +726,8 @@ return $input.all().filter(i => i.json.id).map(i => ({{ json: {{ booking_id: i.j
               "&updated_at=lt.{{ $json.followBefore }}&updated_at=gt.{{ $json.followAfter }}&select=chat_id,check_in,check_out,room_type,guest_name,tg_name,lang",
               (1120, 2100), always=True)
     cg = code(w, "Compose follow-ups", booking_js("followup_compose.js"), (1340, 2100))
-    tg_follow = w.add("Send follow-up", "n8n-nodes-base.telegram", {
-        "resource": "message", "operation": "sendMessage", "chatId": "={{ $json.chat_id }}",
-        "text": plain("={{ $json.text }}"),
-        "replyMarkup": "inlineKeyboard",
-        "inlineKeyboard": {"rows": [{"row": {"buttons": [
-            {"text": "={{ $json.yes_label }}", "additionalFields": {"callback_data": "fuyes:x"}},
-            {"text": "={{ $json.no_label }}", "additionalFields": {"callback_data": "funo:x"}}]}}]},
-        "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}, (1560, 2100), ver=1.2, creds=C["tg"], onError="continueRegularOutput")
+    tg_follow = tg_send(w, "Send follow-up", "={{ $json.chat_id }}", "={{ $json.text }}", (1560, 2100), onError="continueRegularOutput",
+                        markup="{ inline_keyboard: [ [ { text: $json.yes_label, callback_data: 'fuyes:x' }, { text: $json.no_label, callback_data: 'funo:x' } ] ] }")
     # marked sent even when Telegram refused it (for example the person blocked the bot): one attempt only, never a retry loop
     mg = http(w, "Mark follow-up sent", "PATCH", "=" + SB + "/booking_drafts?chat_id=eq.{{ $('Compose follow-ups').item.json.chat_id }}", (1780, 2100),
               body="={{ JSON.stringify({ followup_sent_at: new Date().toISOString() }) }}", prefer="return=minimal")
@@ -673,7 +749,7 @@ return $input.all().filter(i => i.json.id).map(i => ({{ json: {{ booking_id: i.j
               body="={{ JSON.stringify({ p_days: 7 }) }}", always=True)
     ch = code(w, "Compose ratings summary", booking_js("digest_compose.js"), (1340, 2400))
     sh = if_node(w, "Anything to send?", "={{ $json.send }}", "boolean", "true", (1560, 2340))
-    th = tg_send(w, "Send ratings summary", str(STAFF_CHAT_ID), "={{ $('Compose ratings summary').first().json.text }}", (1780, 2300),
+    th = tg_send(w, "Send ratings summary", STAFF, "={{ $('Compose ratings summary').first().json.text }}", (1780, 2300),
                  onError="continueRegularOutput")
     mh = http(w, "Mark ratings summary done", "POST", "=" + SB + "/hotel_settings?on_conflict=key", (1560, 2460),
               prefer="resolution=merge-duplicates,return=minimal",
@@ -722,7 +798,7 @@ return $input.all().map(i => i.json).filter(e => e.id).filter(e => {
       (n >= 3 ? '\\n\\n🚨 This is the last reminder. Please tell the duty manager.' : '') } };
 });
 """, (1120, 900))
-    td = tg_send(w, "Re-alert staff group", str(STAFF_CHAT_ID), "={{ $json.text }}", (1340, 900), onError="continueErrorOutput")
+    td = tg_send(w, "Re-alert staff group", STAFF, "={{ $json.text }}", (1340, 900), onError="continueErrorOutput")
     md = http(w, "Mark re-alerted", "PATCH", "=" + SB + "/escalations?id=eq.{{ $('Compose re-alerts').item.json.id }}", (1560, 900),
               body="={{ JSON.stringify({ reminded_at: new Date().toISOString(), remind_count: $('Compose re-alerts').item.json.remind_count }) }}",
               prefer="return=minimal")
@@ -750,15 +826,34 @@ return $input.all().map(i => i.json).filter(e => e.id && e.guest_chat_id).map(e 
     return w
 
 
+def scheduler_parent():
+    """Every 15 minutes: list the active hotels and run the per-hotel scheduler once for each. A failure in one hotel never stops the others."""
+    w = WF("Hotel Guest Journey - Scheduler", hx="$json")
+    trig = w.add("Every 15 minutes", "n8n-nodes-base.scheduleTrigger",
+                 {"rule": {"interval": [{"field": "minutes", "minutesInterval": 15}]}}, (0, 300), ver=1.2)
+    lh = http(w, "List active hotels", "GET", "=" + SB + "/hotels?active=eq.true&select=id,slug,name,timezone,staff_chat_id&order=created_at", (220, 300),
+              always=True, scope=False)
+    run = w.add("Run one hotel", "n8n-nodes-base.executeWorkflow", {
+        "source": "database", "workflowId": {"__rl": True, "value": workflow_id("Hotel Guest Journey - Scheduler (one hotel)"), "mode": "id"},
+        "mode": "each", "options": {"waitForSubWorkflow": True}}, (440, 300), ver=1.2, onError="continueRegularOutput")
+    w.chain(trig, lh, run)
+    return w
+
+
 # ============================================================ 3. Booking created
 def booking_created():
-    w = WF("Hotel Guest Journey - Booking Created")
+    w = WF("Hotel Guest Journey - Booking Created", hx="$('Find hotel').first().json.hotel")
+    # The caller proves which hotel it is with that hotel's own booking secret (header x-webhook-secret); no secret match = refused.
     hook = w.add("Webhook", "n8n-nodes-base.webhook",
-                 {"httpMethod": "POST", "path": "guest-booking-created", "authentication": "headerAuth",
-                  "responseMode": "responseNode", "options": {}}, (0, 200), ver=2.1, creds=C["wh"],
+                 {"httpMethod": "POST", "path": P("guest-booking-created"), "responseMode": "responseNode", "options": {}}, (0, 200), ver=2.1,
                  webhookId=str(uuid.uuid4()))
+    fh = http(w, "Find hotel", "POST", "=" + SB + "/rpc/hotel_by_secret", (110, 200), always=True, scope=False,
+              body="={{ JSON.stringify({ p_kind: 'booking', p_secret: String(($('Webhook').first().json.headers || {})['x-webhook-secret'] || '') }) }}")
+    known = if_node(w, "Hotel known?", "={{ $json.found }}", "boolean", "true", (165, 200))
+    no401 = w.add("Respond 401", "n8n-nodes-base.respondToWebhook",
+                  {"respondWith": "json", "responseBody": "={{ JSON.stringify({ error: 'Unauthorized' }) }}", "options": {"responseCode": 401}}, (220, 360), ver=1.4)
     val = code(w, "Validate", """
-const b = $input.first().json.body || {};
+const b = $('Webhook').first().json.body || {};
 const date = /^\\d{4}-\\d{2}-\\d{2}$/;
 const name = String(b.name || '').trim();
 let d = String(b.phone || '').replace(/\\D/g, '');
@@ -790,12 +885,15 @@ return [{ json: { guest_id: id } }];
                    "check_out: $('Validate').first().json.check_out }) }}")
     okr = w.add("Respond OK", "n8n-nodes-base.respondToWebhook",
                 {"respondWith": "json", "responseBody":
-                 "={{ JSON.stringify({ booking_id: $json.id, telegram_link: 'https://t.me/" + BOT_USERNAME + "?start=' + $json.start_token }) }}",
+                 "={{ JSON.stringify({ booking_id: $json.id, telegram_link: 'https://t.me/' + " + w.hx + ".bot_username + '?start=' + $json.start_token }) }}",
                  "options": {}}, (1760, 120), ver=1.4)
     bad = w.add("Respond 400", "n8n-nodes-base.respondToWebhook",
                 {"respondWith": "json", "responseBody": "={{ JSON.stringify({ error: $json.error }) }}",
                  "options": {"responseCode": 400}}, (660, 320), ver=1.4)
-    w.chain(hook, val, ok)
+    w.chain(hook, fh, known)
+    w.link(known, val, 0)
+    w.link(known, no401, 1)
+    w.link(val, ok)
     w.link(ok, hasp, 0)
     w.link(ok, bad, 1)
     w.link(hasp, fg, 0)
@@ -809,14 +907,19 @@ return [{ json: { guest_id: id } }];
 
 # ============================================================ 4. Vapi tools (phone calls)
 def vapi_tools():
-    w = WF("Hotel Guest Journey - Vapi Tools")
+    w = WF("Hotel Guest Journey - Vapi Tools", hx="$('Find hotel').first().json.hotel")
     w.fast = True
+    # The phone assistant of each hotel carries that hotel's own secret (header x-webhook-secret); it says which hotel the call is for.
     hook = w.add("Webhook", "n8n-nodes-base.webhook",
-                 {"httpMethod": "POST", "path": "hotel-guest-journey-vapi", "authentication": "headerAuth",
-                  "responseMode": "responseNode", "options": {}}, (0, 300), ver=2.1, creds=C["vh"],
+                 {"httpMethod": "POST", "path": P("hotel-guest-journey-vapi"), "responseMode": "responseNode", "options": {}}, (0, 300), ver=2.1,
                  webhookId=str(uuid.uuid4()))
+    fh = http(w, "Find hotel", "POST", "=" + SB + "/rpc/hotel_by_secret", (-110, 300), always=True, scope=False,
+              body="={{ JSON.stringify({ p_kind: 'vapi', p_secret: String(($('Webhook').first().json.headers || {})['x-webhook-secret'] || '') }) }}")
+    known = if_node(w, "Hotel known?", "={{ $json.found }}", "boolean", "true", (-55, 300))
+    no401 = w.add("Respond 401", "n8n-nodes-base.respondToWebhook",
+                  {"respondWith": "json", "responseBody": "={{ JSON.stringify({ error: 'Unauthorized' }) }}", "options": {"responseCode": 401}}, (0, 460), ver=1.4)
     ext = code(w, "Extract tool call", """
-const m = ($input.first().json.body || {}).message || {};
+const m = ($('Webhook').first().json.body || {}).message || {};
 const c = (m.toolCallList || m.toolCalls || [])[0] || {};
 const fn = c.function || {};
 let args = c.arguments !== undefined ? c.arguments : (fn.arguments !== undefined ? fn.arguments : {});
@@ -836,7 +939,10 @@ return [{ json: { tool_call_id: c.id || '', tool_name: c.name || fn.name || '', 
                       "renameOutput": True, "outputKey": t})
     route = w.add("Route", "n8n-nodes-base.switch", {"rules": {"values": rules}, "options": {"fallbackOutput": "extra"}},
                   (440, 300), ver=3.4)
-    w.chain(hook, ext, route)
+    w.chain(hook, fh, known)
+    w.link(known, ext, 0)
+    w.link(known, no401, 1)
+    w.link(ext, route)
 
     # ---- ask_hotel_info: answer from the knowledge base or alert staff
     kb = http(w, "Get knowledge", "GET", "=" + SB + "/knowledge_entries?select=id,question,answer", (700, 0))
@@ -851,7 +957,7 @@ for (const i of $('Get knowledge').all()) {{
   if (keys.some(k => !settings[k])) continue;           // unfilled placeholder: not answerable
   entries.push(`Q: ${{e.question}}\\nA: ${{e.answer.replace(/\\[\\[(\\w+)\\]\\]/g, (_, k) => settings[k])}}`);
 }}
-const system = `You are the phone receptionist assistant for ${{settings.HOTEL_NAME || '{HOTEL_NAME}'}}, a hotel in Nigeria. A caller asked a question; write what should be said aloud.
+const system = `You are the phone receptionist assistant for ${{settings.HOTEL_NAME || $('Find hotel').first().json.hotel.name}}, a hotel in Nigeria. A caller asked a question; write what should be said aloud.
 RULES:
 - Answer ONLY from the KNOWLEDGE below. Never invent facts, prices, times, names, phone numbers or policies.
 - If the answer is not in the knowledge, set can_answer to false and leave answer empty. If your reply would only say you do not know or cannot help, that also means can_answer false with an empty answer.
@@ -895,7 +1001,7 @@ return [{ json: { tool_call_id: ctx.tool_call_id, question: ctx.question, caller
   escalate, ai_answered: useAnswer, kind, category, alert_title } }];
 """, (1580, 0))
     esc = if_node(w, "Needs staff?", "={{ $json.escalate }}", "boolean", "true", (1800, 0))
-    alert = tg_send(w, "Alert staff group", str(STAFF_CHAT_ID),
+    alert = tg_send(w, "Alert staff group", STAFF,
                     "={{ $json.alert_title }}\nCaller: {{ $json.caller_name || 'unknown' }}{{ $json.caller_number ? ' (' + $json.caller_number + ')' : '' }}\n"
                     "Question: \"{{ $json.question }}\"\n"
                     "{{ $json.ai_answered ? 'AI told the caller: ' + $json.reply : 'AI could not answer from the knowledge base.' }}\n\n"
@@ -921,7 +1027,7 @@ return [{ json: { tool_call_id: p.tool_call_id, result: p.reply } }];
     # ---- check_availability / book_room: validate, query room_availability, then (booking only) save
     val = code(w, "Validate request", """
 const c = $input.first().json;
-const today = new Date(Date.now() + 3600 * 1000).toISOString().slice(0, 10);   // Africa/Lagos (UTC+1)
+const today = new Intl.DateTimeFormat('en-CA', { timeZone: $('Find hotel').first().json.hotel.timezone || 'Africa/Lagos' }).format(new Date());   // the hotel's clock
 const re = /^\\d{4}-\\d{2}-\\d{2}$/;
 const fail = msg => [{ json: { ...c, valid: false, result: msg } }];
 if (!re.test(c.check_in) || !re.test(c.check_out) || isNaN(Date.parse(c.check_in)) || isNaN(Date.parse(c.check_out)))
@@ -982,11 +1088,11 @@ const total = c.rate ? ` The estimated total is ${(Number(c.rate) * c.nights).to
 return [{ json: { tool_call_id: c.tool_call_id,
   result: `Booked. ${c.room_type} room for ${c.guest_name}, ${c.check_in} to ${c.check_out}, ${c.nights} night${c.nights > 1 ? 's' : ''}.${total} ` +
     `The booking reference is ${b.ref}. To get check-in reminders and the private stay code, the guest should open Telegram, ` +
-    `search for the username __BOT__, tap Start and share their phone number. Say the username slowly.`,
+    `search for the username ${$('Find hotel').first().json.hotel.bot_username}, tap Start and share their phone number. Say the username slowly.`,
   staff: `📞 New phone booking\nRef: ${b.ref}\nGuest: ${c.guest_name} (${c.phone})\n${c.room_type}, ${c.check_in} to ${c.check_out} (${c.nights} night${c.nights > 1 ? 's' : ''})` } }];
-""".replace("__BOT__", BOT_USERNAME), (2020, 380))
+""", (2020, 380))
     needs_alert = if_node(w, "Alert staff?", "={{ $json.staff }}", "string", "notEmpty", (2240, 380))
-    abook = tg_send(w, "Alert staff (booking)", str(STAFF_CHAT_ID), "={{ $json.staff }}", (2460, 320), onError="continueRegularOutput")
+    abook = tg_send(w, "Alert staff (booking)", STAFF, "={{ $json.staff }}", (2460, 320), onError="continueRegularOutput")
     unknown = code(w, "Unknown tool reply", """
 const c = $input.first().json;
 return [{ json: { tool_call_id: c.tool_call_id, result: 'That tool is not available.' } }];
@@ -1036,11 +1142,11 @@ def demo_alert():
             f.write(f"DEMO_ALERT_PATH={path}\n")
         ENV["DEMO_ALERT_PATH"] = path
         print("created DEMO_ALERT_PATH in .env")
-    w = WF("Alejo - Demo Request Alert")
+    w = WF("Alejo - Demo Request Alert", hx="({ id: '" + PLATFORM_HOTEL_ID + "' })")
     hook = w.add("Webhook", "n8n-nodes-base.webhook",
-                 {"httpMethod": "POST", "path": path, "responseMode": "onReceived", "options": {}},
+                 {"httpMethod": "POST", "path": P(path), "responseMode": "onReceived", "options": {}},
                  (0, 200), ver=2.1, webhookId=str(uuid.uuid4()))
-    tg = tg_send(w, "Tell the team", str(STAFF_CHAT_ID),
+    tg = tg_send(w, "Tell the team", str(PLATFORM_STAFF_CHAT_ID),
                  "={{ 'New Alejo demo request\\n' + ($json.body.hotel || '(no hotel name)') + '\\n' + $json.body.email + '\\n' + ($json.body.rooms || 'rooms not given') }}",
                  (240, 200))
     w.chain(hook, tg)
@@ -1059,20 +1165,23 @@ def dashboard_reply():
             f.write(f"DASH_REPLY_PATH={path}\n")
         ENV["DASH_REPLY_PATH"] = path
         print("created DASH_REPLY_PATH in .env")
-    w = WF("Alejo - Dashboard Reply")
+    w = WF("Alejo - Dashboard Reply", hx="$('Load hotel').first().json")
     hook = w.add("Webhook", "n8n-nodes-base.webhook",
-                 {"httpMethod": "POST", "path": path, "responseMode": "responseNode", "options": {}},
+                 {"httpMethod": "POST", "path": P(path), "responseMode": "responseNode", "options": {}},
                  (0, 200), ver=2.1, webhookId=str(uuid.uuid4()))
     val = code(w, "Validate", """
 const b = $input.first().json.body || {};
 const id = String(b.escalation_id || '');
 const answer = String(b.answer || '').trim().slice(0, 1500);
-const ok = /^[0-9a-f-]{36}$/i.test(id) && answer.length > 0;
-return [{ json: { ok, id, answer, learn: !!b.learn, by: String(b.by || 'Staff').slice(0, 60) } }];
+const hotel_id = String(b.hotel_id || '');
+const ok = /^[0-9a-f-]{36}$/i.test(id) && /^[0-9a-f-]{36}$/i.test(hotel_id) && answer.length > 0;
+return [{ json: { ok, id, hotel_id, answer, learn: !!b.learn, by: String(b.by || 'Staff').slice(0, 60) } }];
 """, (220, 200))
     okc = if_node(w, "Valid?", "={{ $json.ok }}", "boolean", "true", (440, 200))
+    lh = http(w, "Load hotel", "GET", "=" + SB + "/hotels?id=eq.{{ $json.hotel_id }}&select=id,slug,name,timezone,staff_chat_id", (550, 120),
+              always=True, scope=False)
     fe = http(w, "Find open escalation", "GET",
-              "=" + SB + "/escalations?id=eq.{{ $json.id }}&status=eq.open&select=id,guest_id,guest_chat_id,question",
+              "=" + SB + "/escalations?id=eq.{{ $('Validate').first().json.id }}&status=eq.open&select=id,guest_id,guest_chat_id,question",
               (660, 120), always=True)
     found = if_node(w, "Escalation found?", "={{ $json.id }}", "string", "notEmpty", (880, 120))
     to_guest = tg_send(w, "Forward to guest", "={{ $json.guest_chat_id }}",
@@ -1088,7 +1197,7 @@ return [{ json: { ok, id, answer, learn: !!b.learn, by: String(b.by || 'Staff').
               prefer="resolution=merge-duplicates,return=minimal",
               body="={{ JSON.stringify({ id: 'staff-' + $('Find open escalation').first().json.id, category: 'staff', "
                    "question: $('Find open escalation').first().json.question, answer: $('Validate').first().json.answer, source: 'staff' }) }}")
-    tell = tg_send(w, "Tell the staff group", str(STAFF_CHAT_ID),
+    tell = tg_send(w, "Tell the staff group", STAFF,
                    "={{ '✅ ' + $('Validate').first().json.by + ' replied from the dashboard to: ' + $('Find open escalation').first().json.question + '\\n' + $('Validate').first().json.answer + ($('Validate').first().json.learn ? '\\n(saved to the knowledge base)' : '') }}",
                    (2200, 40))
     ok_resp = w.add("Respond OK", "n8n-nodes-base.respondToWebhook",
@@ -1100,9 +1209,9 @@ return [{ json: { ok, id, answer, learn: !!b.learn, by: String(b.by || 'Staff').
                 {"respondWith": "json", "responseBody": "={{ JSON.stringify({ error: 'Write a reply first.' }) }}",
                  "options": {"responseCode": 400}}, (660, 320), ver=1.4)
     w.chain(hook, val, okc)
-    w.link(okc, fe, 0)
+    w.link(okc, lh, 0)
     w.link(okc, bad, 1)
-    w.chain(fe, found)
+    w.chain(lh, fe, found)
     w.link(found, to_guest, 0)
     w.link(found, nf, 1)
     w.chain(to_guest, mark, log, learn)
@@ -1124,13 +1233,11 @@ def typing_signal():
             f.write(f"TYPING_PATH={path}\n")
         ENV["TYPING_PATH"] = path
         print("created TYPING_PATH in .env")
-    w = WF("Alejo - Typing Signal")
+    w = WF("Alejo - Typing Signal", hx="({ id: $('Webhook').first().json.body.hotel_id })")
     hook = w.add("Webhook", "n8n-nodes-base.webhook",
-                 {"httpMethod": "POST", "path": path, "responseMode": "onReceived", "options": {}},
+                 {"httpMethod": "POST", "path": P(path), "responseMode": "onReceived", "options": {}},
                  (0, 200), ver=2.1, webhookId=str(uuid.uuid4()))
-    act = w.add("Show typing", "n8n-nodes-base.telegram",
-                {"resource": "message", "operation": "sendChatAction", "chatId": "={{ $json.body.chat_id }}", "action": "typing"},
-                (240, 200), ver=1.2, creds=C["tg"])
+    act = tg_typing(w, "Show typing", "$json.body.chat_id", (240, 200))
     w.chain(hook, act)
     return w
 
@@ -1138,9 +1245,26 @@ def typing_signal():
 def workflow_id(name):
     """Id of an existing workflow by name (the typing helper must be created before the bot that starts it)."""
     for x in api("GET", "/workflows?limit=250")["data"]:
-        if x["name"] == name:
+        if x["name"] == name + SUFFIX:
             return x["id"]
-    sys.exit(f"workflow not found yet: {name} (build it first)")
+    sys.exit(f"workflow not found yet: {name + SUFFIX} (build it first)")
+
+
+def P(path):
+    """Webhook path of a parallel (suffixed) copy; unchanged for the real workflows."""
+    return path + SUFFIX.strip().replace(" ", "-").replace("(", "").replace(")", "")
+
+
+def tg_path():
+    """Unguessable webhook path every hotel's Telegram bot posts to (created once, kept in .env as TG_WEBHOOK_PATH)."""
+    path = ENV.get("TG_WEBHOOK_PATH")
+    if not path:
+        path = "alejo-tg-" + secrets.token_urlsafe(18)
+        with open(ROOT / ".env", "a", encoding="utf-8") as f:
+            f.write("\nTG_WEBHOOK_PATH=" + path + "\n")
+        ENV["TG_WEBHOOK_PATH"] = path
+        print("created TG_WEBHOOK_PATH in .env")
+    return P(path)
 
 
 def keepalive_path():
@@ -1160,17 +1284,15 @@ def typing_keepalive():
     """Started by the Telegram bot for every guest message. Shows "typing..." at once, then again every ~3.5 seconds, until the
     bot marks the answer as ready (bot_availability sets bot_typing.finished_at just before the reply is composed and sent).
     Gives up after about 30 seconds so a failed run can never leave it typing for ever."""
-    w = WF("Hotel Guest Journey - Typing Keepalive")
+    w = WF("Hotel Guest Journey - Typing Keepalive", hx="({ id: $('Chat').first().json.hotel_id })")
     w.fast = True
     chat = "$('Chat').first().json.chat_id"
     hook = w.add("Webhook", "n8n-nodes-base.webhook",
-                 {"httpMethod": "POST", "path": keepalive_path(), "responseMode": "onReceived", "options": {}},
+                 {"httpMethod": "POST", "path": P(keepalive_path()), "responseMode": "onReceived", "options": {}},
                  (0, 300), ver=2.1, webhookId=str(uuid.uuid4()))
     sub_trigger = w.add("Called by the bot", "n8n-nodes-base.executeWorkflowTrigger", {"inputSource": "passthrough"}, (0, 460), ver=1.1)
-    norm = code(w, "Chat", "const j = $input.first().json; return [{ json: { chat_id: j.body ? j.body.chat_id : j.chat_id } }];", (220, 380))
-    now = w.add("Typing now", "n8n-nodes-base.telegram",
-                {"resource": "message", "operation": "sendChatAction", "chatId": "={{ $json.chat_id }}", "action": "typing"},
-                (440, 380), ver=1.2, creds=C["tg"], onError="continueRegularOutput")
+    norm = code(w, "Chat", "const j = $input.first().json; return [{ json: { chat_id: j.body ? j.body.chat_id : j.chat_id, hotel_id: j.body ? j.body.hotel_id : (j.hotel && j.hotel.id) } }];", (220, 380))
+    now = tg_typing(w, "Typing now", "$json.chat_id", (440, 380), onError="continueRegularOutput")
     start = http(w, "Mark start", "POST", "=" + SB + "/bot_typing?on_conflict=chat_id", (660, 380),
                  body="={{ JSON.stringify({ chat_id: " + chat + ", started_at: new Date().toISOString(), finished_at: null }) }}",
                  prefer="resolution=merge-duplicates,return=minimal", onError="continueRegularOutput")
@@ -1181,9 +1303,7 @@ def typing_keepalive():
     check = http(w, "Check answer ready", "GET", "=" + SB + "/bot_typing?chat_id=eq.{{ " + chat + " }}&select=finished_at",
                  (1320, 400), always=True, onError="continueRegularOutput")
     working = if_node(w, "Still working?", "={{ $json.finished_at || '' }}", "string", "empty", (1540, 400))
-    again = w.add("Typing again", "n8n-nodes-base.telegram",
-                  {"resource": "message", "operation": "sendChatAction", "chatId": "={{ " + chat + " }}", "action": "typing"},
-                  (1760, 340), ver=1.2, creds=C["tg"], onError="continueRegularOutput")
+    again = tg_typing(w, "Typing again", chat, (1760, 340), onError="continueRegularOutput")
     w.link(hook, norm)
     w.link(sub_trigger, norm)
     w.chain(norm, now, start, ticks, loop)
@@ -1195,6 +1315,7 @@ def typing_keepalive():
 
 
 def upsert(w):
+    audit(w)
     existing = {x["name"]: x["id"] for x in api("GET", "/workflows?limit=250")["data"]}
     body = w.body()
     if w.name in existing:
@@ -1208,13 +1329,13 @@ def upsert(w):
 
 if __name__ == "__main__":
     ids = {}
-    ONLY = {"--only-keepalive": (typing_keepalive,), "--only-telegram": (telegram_bot,), "--only-vapi": (vapi_tools,), "--only-demo-alert": (demo_alert,), "--only-dashboard-reply": (dashboard_reply,), "--only-typing": (typing_signal,), "--only-scheduler": (scheduler,)}
+    ONLY = {"--only-keepalive": (typing_keepalive,), "--only-telegram": (telegram_bot,), "--only-vapi": (vapi_tools,), "--only-demo-alert": (demo_alert,), "--only-dashboard-reply": (dashboard_reply,), "--only-typing": (typing_signal,), "--only-scheduler": (scheduler, scheduler_parent), "--only-booking": (booking_created,)}
     picked = [b for flag, b in ONLY.items() if flag in sys.argv]
-    builds = picked[0] if picked else (typing_keepalive, telegram_bot, scheduler, booking_created, vapi_tools, demo_alert, dashboard_reply, typing_signal)
+    builds = picked[0] if picked else (typing_keepalive, telegram_bot, scheduler, scheduler_parent, booking_created, vapi_tools, demo_alert, dashboard_reply, typing_signal)
     for build in builds:
         wf = build()
         ids[wf.name] = upsert(wf)
-    if not picked:
+    if not picked and not SUFFIX:
         (ROOT / ".tmp" / "n8n_workflow_ids.json").write_text(json.dumps(ids, indent=1), encoding="utf-8")
     else:
         print("workflow id:", ids)

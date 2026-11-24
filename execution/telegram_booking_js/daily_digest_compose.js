@@ -17,7 +17,7 @@ const SRC = { telegram: 'Telegram', phone: 'Phone', 'walk-in': 'Walk-in', online
 
 const arriving = d.arriving || [], leaving = d.leaving || [];
 const total = Number(d.rooms_total) || 0, inHouse = Number(d.in_house) || 0;
-const lines = [`☀️ ${s.HOTEL_NAME || 'Your hotel'}, ${label}`, '', 'TODAY',
+const lines = [`☀️ ${s.HOTEL_NAME || (($('Context').first().json || {}).hotel || {}).name || 'Your hotel'}, ${label}`, '', 'TODAY',
   arriving.length ? `Arriving (${arriving.length}): ${list(arriving, 6, stay)}` : 'Arriving: nobody',
   leaving.length ? `Leaving (${leaving.length}): ${list(leaving, 6, stay)}` : 'Leaving: nobody',
   `In house: ${inHouse} of ${plural(total, 'room', 'rooms')}${total ? ` (${Math.round(100 * inHouse / total)}%)` : ''}`,
@@ -38,4 +38,4 @@ if (Number(d.unpaid_count)) need.push(`Unpaid: ${plural(Number(d.unpaid_count), 
 lines.push(...(need.length ? need : ['Nothing is waiting on you. ✅']));
 
 const custom = String(s.MANAGER_CHAT_ID || '').trim();
-return [{ json: { chat_id: /^-?\d{5,}$/.test(custom) ? Number(custom) : __STAFF__, text: lines.join('\n') } }];
+return [{ json: { chat_id: /^-?\d{5,}$/.test(custom) ? Number(custom) : Number((($('Context').first().json || {}).hotel || {}).staff_chat_id), text: lines.join('\n') } }];

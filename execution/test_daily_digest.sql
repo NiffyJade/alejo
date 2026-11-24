@@ -3,37 +3,38 @@
 -- It adds synthetic rows and checks the DIFFERENCE the digest shows, so real data does not matter.
 do $$
 declare
+  HID uuid := (select id from hotels where slug = 'brightside');
   today date := (now() at time zone 'Africa/Lagos')::date;
   g1 uuid; g2 uuid; g3 uuid; b_arr uuid; b_leave uuid; b_new uuid; b_canc uuid;
   d0 jsonb; d1 jsonb; item jsonb;
 begin
-  d0 := daily_digest();
+  d0 := daily_digest(HID);
   assert d0->>'today' = today::text, 'today is the Lagos date';
-  assert (d0->>'rooms_total')::int = (select sum(total_rooms) from room_types where active), 'rooms total';
-  assert jsonb_array_length(d0->'free_tonight') = (select count(*) from room_types where active), 'free tonight lists every room type';
+  assert (d0->>'rooms_total')::int = (select sum(total_rooms) from room_types where active and hotel_id = HID), 'rooms total';
+  assert jsonb_array_length(d0->'free_tonight') = (select count(*) from room_types where active and hotel_id = HID), 'free tonight lists every room type';
 
-  insert into guests (name, phone) values ('Arriving Ada', '+2348070000001') returning id into g1;
-  insert into guests (name, phone) values ('Leaving Lekan', '+2348070000002') returning id into g2;
-  insert into guests (name, phone) values ('Fresh Funmi', '+2348070000003') returning id into g3;
+  insert into guests (hotel_id, name, phone) values (HID, 'Arriving Ada', '+2348070000001') returning id into g1;
+  insert into guests (hotel_id, name, phone) values (HID, 'Leaving Lekan', '+2348070000002') returning id into g2;
+  insert into guests (hotel_id, name, phone) values (HID, 'Fresh Funmi', '+2348070000003') returning id into g3;
 
   -- arrives today, Deluxe 2 nights (110,000), part paid 30,000 -> owes 80,000
-  insert into bookings (guest_id, room_type, check_in, check_out, status, source, created_at) values (g1, 'Deluxe', today, today + 2, 'booked', 'phone', now() - interval '3 days') returning id into b_arr;
-  insert into booking_payments (booking_id, amount, method, created_at) values (b_arr, 30000, 'cash', now() - interval '3 days');
+  insert into bookings (hotel_id, guest_id, room_type, check_in, check_out, status, source, created_at) values (HID, g1, 'Deluxe', today, today + 2, 'booked', 'phone', now() - interval '3 days') returning id into b_arr;
+  insert into booking_payments (hotel_id, booking_id, amount, method, created_at) values (HID, b_arr, 30000, 'cash', now() - interval '3 days');
   -- leaves today, Standard 2 nights (70,000), nothing paid -> owes 70,000
-  insert into bookings (guest_id, room_type, room_number, check_in, check_out, status, checked_in_at, source, created_at) values (g2, 'Standard', '101', today - 2, today, 'checked_in', now() - interval '2 days', 'telegram', now() - interval '5 days') returning id into b_leave;
+  insert into bookings (hotel_id, guest_id, room_type, room_number, check_in, check_out, status, checked_in_at, source, created_at) values (HID, g2, 'Standard', '101', today - 2, today, 'checked_in', now() - interval '2 days', 'telegram', now() - interval '5 days') returning id into b_leave;
   -- booked in the last 24 hours (Telegram, Suite 1 night = 95,000) and one that was booked then cancelled
-  insert into bookings (guest_id, room_type, check_in, check_out, status, source, created_at) values (g3, 'Suite', today + 10, today + 11, 'booked', 'telegram', now() - interval '2 hours') returning id into b_new;
-  insert into bookings (guest_id, room_type, check_in, check_out, status, source, created_at, cancelled_at) values (g3, 'Suite', today + 20, today + 21, 'cancelled', 'walk-in', now() - interval '5 hours', now() - interval '1 hour') returning id into b_canc;
-  insert into booking_payments (booking_id, amount, method, created_at) values (b_new, 50000, 'transfer', now() - interval '1 hour'), (b_new, -5000, 'cash', now() - interval '30 minutes');
-  insert into messages (chat_id, direction, text, intent, created_at) values
-    (990003001, 'in', 'rooms?', 'availability', now() - interval '3 hours'), (990003001, 'in', 'deluxe', 'book', now() - interval '2 hours'),
-    (990003002, 'in', 'wifi?', 'info', now() - interval '4 hours'), (990003003, 'in', 'old message', 'availability', now() - interval '2 days');
-  insert into escalations (guest_chat_id, question, kind, status, created_at) values
-    (990003002, 'can I bring a dog?', 'question', 'open', now() - interval '3 hours'),
-    (990003004, 'AC is broken', 'request', 'open', now() - interval '90 minutes'),
-    (990003005, 'Rated their stay 2 out of 5', 'complaint', 'answered', now() - interval '1 hour');
+  insert into bookings (hotel_id, guest_id, room_type, check_in, check_out, status, source, created_at) values (HID, g3, 'Suite', today + 10, today + 11, 'booked', 'telegram', now() - interval '2 hours') returning id into b_new;
+  insert into bookings (hotel_id, guest_id, room_type, check_in, check_out, status, source, created_at, cancelled_at) values (HID, g3, 'Suite', today + 20, today + 21, 'cancelled', 'walk-in', now() - interval '5 hours', now() - interval '1 hour') returning id into b_canc;
+  insert into booking_payments (hotel_id, booking_id, amount, method, created_at) values (HID, b_new, 50000, 'transfer', now() - interval '1 hour'), (HID, b_new, -5000, 'cash', now() - interval '30 minutes');
+  insert into messages (hotel_id, chat_id, direction, text, intent, created_at) values
+    (HID, 990003001, 'in', 'rooms?', 'availability', now() - interval '3 hours'), (HID, 990003001, 'in', 'deluxe', 'book', now() - interval '2 hours'),
+    (HID, 990003002, 'in', 'wifi?', 'info', now() - interval '4 hours'), (HID, 990003003, 'in', 'old message', 'availability', now() - interval '2 days');
+  insert into escalations (hotel_id, guest_chat_id, question, kind, status, created_at) values
+    (HID, 990003002, 'can I bring a dog?', 'question', 'open', now() - interval '3 hours'),
+    (HID, 990003004, 'AC is broken', 'request', 'open', now() - interval '90 minutes'),
+    (HID, 990003005, 'Rated their stay 2 out of 5', 'complaint', 'answered', now() - interval '1 hour');
 
-  d1 := daily_digest();
+  d1 := daily_digest(HID);
   assert (d1->>'in_house')::int - (d0->>'in_house')::int = 1, 'one more in house';
   select x into item from jsonb_array_elements(d1->'arriving') x where x->>'name' = 'Arriving Ada';
   assert item is not null and item->>'room_type' = 'Deluxe' and (item->>'balance')::numeric = 80000, 'arriving, owes 80,000: ' || coalesce(item::text, 'missing');

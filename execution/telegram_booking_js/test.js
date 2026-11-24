@@ -3,7 +3,7 @@
 const fs = require('fs'), path = require('path');
 const assert = require('assert');
 const load = f => fs.readFileSync(path.join(__dirname, f), 'utf8').replace('// __LANG__', fs.readFileSync(path.join(__dirname, 'lang.js'), 'utf8'))
-  .replace(/__HOTEL__/g, 'BrightSide Hotel').replace(/__MODEL__/g, 'm');
+  .replace(/__MODEL__/g, 'm');
 
 // Runs a Code-node script: `nodes` = outputs of other nodes by name, `input` = items arriving at this node.
 function run(file, nodes, input) {

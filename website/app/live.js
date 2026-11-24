@@ -8,7 +8,10 @@
   const SB = 'https://uavlejanscnsvjdxfslh.supabase.co';
   const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVhdmxlamFuc2Nuc3ZqZHhmc2xoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwMDcyODUsImV4cCI6MjEwODU4MzI4NX0.wDbPMD4BHF9ZpkgTwyAub-pyYQgsY93FSdQaUNlrJRA';                                  // public by design
   const KEY = 'alejo_auth';
-  const TZ = 'Africa/Lagos';
+  const HKEY = 'alejo_hotel';                                        // which hotel this browser last looked at
+  let TZ = 'Africa/Lagos';                                           // replaced by the hotel's own timezone once the hotel is known
+  let HOTEL = null, HOTELS = [];                                     // the hotel on screen, and every hotel this account may open
+  const hq = (path) => path + (path.includes('?') ? '&' : '?') + 'hotel_id=eq.' + HOTEL.id;     // every read and change names its hotel
 
   /* ---------- session ---------- */
   const store = {
@@ -37,22 +40,37 @@
     return r.status === 204 ? null : r.json().catch(() => null);
   };
 
+  const emailOf = (jwt) => { try { return JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).email.toLowerCase(); } catch (e) { return ''; } };
+  const chooseHotel = async () => {                                   // staff see their own hotel(s); a platform admin sees all of them
+    HOTELS = await rest('hotels?select=id,slug,name,timezone&order=name');
+    if (!HOTELS || !HOTELS.length) throw new Error('This account is not on the staff list.');
+    let want = null; try { want = localStorage.getItem(HKEY); } catch (e) { /* private mode */ }
+    HOTEL = HOTELS.find((h) => h.id === want) || HOTELS[0];
+    TZ = HOTEL.timezone || TZ;
+  };
+  const loadMe = async () => {
+    const email = emailOf(await token());
+    const rows = await rest('staff_users?select=name,email,role&hotel_id=eq.' + HOTEL.id + '&email=eq.' + encodeURIComponent(email) + '&limit=1');
+    if (rows && rows.length) return rows[0];
+    if ((await rest('rpc/is_platform_admin', { method: 'POST', body: '{}' })) === true) return { name: email.split('@')[0], email, role: 'admin' };   // Alejo's own admin looking after a hotel
+    throw new Error('This account is not on the staff list.');
+  };
   const fetchRows = async () => {
     const [guests, bookings, escalations, messages, rooms, kb, settings, payments, blocks] = await Promise.all([
-      rest('guests?select=id,name,phone,telegram_chat_id&limit=1000'),
-      rest('bookings?select=*&order=check_in.desc&limit=1000'),
-      rest('escalations?select=*&order=created_at.desc&limit=500'),
-      rest('messages?select=guest_id,direction,text,created_at&guest_id=not.is.null&order=created_at.desc&limit=1000'),   // people who have not booked yet are counted on the Enquiries page, not shown as conversations
-      rest('room_types?select=name,nightly_rate,total_rooms,active'),
-      rest('knowledge_entries?select=id,category,question,answer,source&limit=1000'),
-      rest('hotel_settings?select=key,value&limit=500'),
-      rest('booking_payments?select=id,booking_id,amount,method,note,created_at&order=created_at.asc&limit=5000'),
-      rest('room_blocks?select=*&order=start_date.asc&limit=500'),
+      rest(hq('guests?select=id,name,phone,telegram_chat_id&limit=1000')),
+      rest(hq('bookings?select=*&order=check_in.desc&limit=1000')),
+      rest(hq('escalations?select=*&order=created_at.desc&limit=500')),
+      rest(hq('messages?select=guest_id,direction,text,created_at&guest_id=not.is.null&order=created_at.desc&limit=1000')),   // people who have not booked yet are counted on the Enquiries page, not shown as conversations
+      rest(hq('room_types?select=name,nightly_rate,total_rooms,active')),
+      rest(hq('knowledge_entries?select=id,category,question,answer,source&limit=1000')),
+      rest(hq('hotel_settings?select=key,value&limit=500')),
+      rest(hq('booking_payments?select=id,booking_id,amount,method,note,created_at&order=created_at.asc&limit=5000')),
+      rest(hq('room_blocks?select=*&order=start_date.asc&limit=500')),
     ]);
     return { guests, bookings, escalations, messages, rooms, kb, settings, payments, blocks };
   };
 
-  /* ---------- Lagos time ---------- */
+    /* ---------- the hotel's own time ---------- */
   const parts = (d) => Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d).map((p) => [p.type, p.value]));
   const dayOf = (d) => { const p = parts(d); return p.year + '-' + p.month + '-' + p.day; };
   const clock = (d) => { const p = parts(d); return p.hour + ':' + p.minute; };
@@ -172,20 +190,56 @@
     return r;
   };
   const manage = {
-    availability: (ci, co) => rest('rpc/staff_availability', { method: 'POST', body: JSON.stringify({ p_check_in: ci, p_check_out: co }) }),
-    create: (a) => call('staff_create_booking', { p_name: a.name, p_phone: a.phone || null, p_room_type: a.type, p_check_in: a.ci, p_check_out: a.co, p_source: a.source,
+    availability: (ci, co) => rest('rpc/staff_availability', { method: 'POST', body: JSON.stringify({ p_hotel: HOTEL.id, p_check_in: ci, p_check_out: co }) }),
+    create: (a) => call('staff_create_booking', { p_hotel: HOTEL.id, p_name: a.name, p_phone: a.phone || null, p_room_type: a.type, p_check_in: a.ci, p_check_out: a.co, p_source: a.source,
       p_room_number: a.room || null, p_check_in_now: !!a.checkInNow, p_paid: a.paid || 0, p_payment_method: a.method || null }),
     cancel: (id, reason) => call('staff_cancel_booking', { p_id: id, p_reason: reason || null }),
     status: (id, action) => call('staff_set_status', { p_id: id, p_action: action }),
     room: (id, room) => call('staff_set_room', { p_id: id, p_room: room }),
     pay: (id, amount, method, note) => call('staff_record_payment', { p_id: id, p_amount: amount, p_method: method || null, p_note: note || null }),
-    block: (a) => call('staff_add_block', { p_room_type: a.type, p_rooms: a.rooms, p_start: a.start, p_end: a.end, p_reason: a.reason || null }),
+    block: (a) => call('staff_add_block', { p_hotel: HOTEL.id, p_room_type: a.type, p_rooms: a.rooms, p_start: a.start, p_end: a.end, p_reason: a.reason || null }),
     unblock: (id) => call('staff_remove_block', { p_id: id }),
   };
 
+  /* ---------- passwords: a one-time password must be replaced at first sign-in; anyone can change theirs later ---------- */
+  const claims = async () => { try { return JSON.parse(atob((await token()).split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch (e) { return {}; } };
+  const putPassword = async (password) => {
+    const a = store.get(); if (!a) throw new Error('signed-out');
+    const r = await fetch(SB + '/auth/v1/user', { method: 'PUT', headers: { apikey: ANON, authorization: 'Bearer ' + (await token()), 'content-type': 'application/json' }, body: JSON.stringify({ password, data: { must_change_password: false } }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.msg || j.error_description || j.message || 'Could not change the password.');
+    store.set(await authCall('refresh_token', { refresh_token: a.refresh }));        // a fresh token without the "must change" flag
+  };
+  const passwordDialog = (forced) => new Promise((resolve) => {
+    const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+    const dlg = mk('dialog', 'mdlg'), head = mk('div', 'mhead'), h2 = mk('h2', '', forced ? 'Choose your own password' : 'Change your password');
+    dlg.setAttribute('aria-labelledby', 'pwt'); h2.id = 'pwt'; head.append(h2);
+    const done = (ok) => { try { dlg.close(); } catch (e) { /* not open */ } dlg.remove(); resolve(ok); };
+    if (!forced) { const c = mk('button', 'btn line small', 'Close'); c.type = 'button'; c.addEventListener('click', () => done(false)); head.append(c); }
+    const form = mk('form', 'msec'); form.style.padding = '16px 20px 20px';
+    const field = (label, id) => { const l = mk('label', 'mfield'), i = mk('input', 'minput'); i.type = 'password'; i.id = id; i.setAttribute('autocomplete', 'new-password'); i.required = true; l.append(mk('span', '', label), i); return [l, i]; };
+    const [l1, p1] = field('New password', 'pw1'), [l2, p2] = field('Type it again', 'pw2');
+    const err = mk('p', 'merr'); err.setAttribute('role', 'alert');
+    const go = mk('button', 'btn', 'Save password'); go.type = 'submit';
+    form.append(mk('p', 'mhint', forced ? 'You signed in with a one-time password. Choose a password only you know (at least 10 characters) to carry on.' : 'Choose a new password (at least 10 characters).'), l1, l2, err, go);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault(); err.textContent = '';
+      if (p1.value.length < 10) { err.textContent = 'Use at least 10 characters.'; return; }
+      if (p1.value !== p2.value) { err.textContent = 'The two passwords are not the same.'; return; }
+      go.disabled = true;
+      try { await putPassword(p1.value); done(true); } catch (x) { err.textContent = x.message; go.disabled = false; }
+    });
+    dlg.append(head, form);
+    if (forced) dlg.addEventListener('cancel', (e) => e.preventDefault());           // Escape must not skip it
+    document.body.append(dlg); dlg.showModal(); p1.focus();
+  });
+
   /* ---------- the public object app.js uses ---------- */
+  const RANK = { staff: 1, manager: 2, owner: 3, admin: 4 };
+  const NEEDS = { enquiries: 'manager', ratings: 'manager', facts: 'manager', settings: 'manager', team: 'owner' };   // each restricted page and the lowest role that may open it
   const Alejo = {
-    live: false, me: null,
+    live: false, me: null, denied: false,
+    can: (min) => !!Alejo.me && (RANK[Alejo.me.role] || 0) >= (RANK[min] || 99),
     signedIn: () => !!store.get(),
     async signIn(email, password) { store.set(await authCall('password', { email, password })); },
     signOut() { store.clear(); location.href = '/app/index.html'; },
@@ -195,18 +249,27 @@
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || 'Could not send the reply.');
     },
-    resolve: (ids) => rest('escalations?id=in.(' + ids.join(',') + ')&status=eq.open', { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ status: 'answered', staff_answer: '', answered_at: new Date().toISOString() }) }),
-    saveFact: (key, value) => rest('hotel_settings?on_conflict=key', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ key, value, updated_at: new Date().toISOString() }) }),
-    deleteAnswer: (id) => rest('knowledge_entries?id=eq.' + encodeURIComponent(id), { method: 'DELETE', headers: { prefer: 'return=minimal' } }),
-    addAnswer: (q, a) => rest('knowledge_entries', { method: 'POST', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ id: 'staff-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())), category: 'staff', question: q, answer: a, source: 'staff' }) }),
-    take: (ids, name) => rest('escalations?id=in.(' + ids.join(',') + ')&status=eq.open', { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ assigned_to: name, assigned_at: name ? new Date().toISOString() : null }) }),   // name = null releases it
+    resolve: (ids) => rest(hq('escalations?id=in.(' + ids.join(',') + ')&status=eq.open'), { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ status: 'answered', staff_answer: '', answered_at: new Date().toISOString() }) }),
+    saveFact: (key, value) => rest('hotel_settings?on_conflict=hotel_id,key', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ hotel_id: HOTEL.id, key, value, updated_at: new Date().toISOString() }) }),
+    deleteAnswer: (id) => rest(hq('knowledge_entries?id=eq.' + encodeURIComponent(id)), { method: 'DELETE', headers: { prefer: 'return=minimal' } }),
+    addAnswer: (q, a) => rest('knowledge_entries', { method: 'POST', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ hotel_id: HOTEL.id, id: 'staff-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())), category: 'staff', question: q, answer: a, source: 'staff' }) }),
+    take: (ids, name) => rest(hq('escalations?id=in.(' + ids.join(',') + ')&status=eq.open'), { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ assigned_to: name, assigned_at: name ? new Date().toISOString() : null }) }),   // name = null releases it
     clock: () => clock(new Date()),
     manage,
-    ratings: (days) => rest('rpc/ratings_report', { method: 'POST', body: JSON.stringify({ p_days: days }) }),
-    report: (days) => rest('rpc/enquiry_report', { method: 'POST', body: JSON.stringify({ p_days: days }) }),
+    team: async (action, a) => {                                    // the owner's Team screen (edge function staff-team; it checks the caller is this hotel's owner)
+      const t = await token();
+      const r = await fetch(SB + '/functions/v1/staff-team', { method: 'POST', headers: { apikey: ANON, authorization: 'Bearer ' + t, 'content-type': 'application/json' }, body: JSON.stringify(Object.assign({ action, hotel_id: HOTEL.id }, a || {})) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'That could not be done.');
+      return j;
+    },
+    changePassword: () => passwordDialog(false),
+    ratings: (days) => rest('rpc/ratings_report', { method: 'POST', body: JSON.stringify({ p_hotel: HOTEL.id, p_days: days }) }),
+    report: (days) => rest('rpc/enquiry_report', { method: 'POST', body: JSON.stringify({ p_hotel: HOTEL.id, p_days: days }) }),
+    hotel: () => HOTEL, hotels: () => HOTELS,
     async ask(question) {                                           // the staff copilot: answers from the hotel's live records (edge function staff-copilot)
       const t = await token();
-      const r = await fetch(SB + '/functions/v1/staff-copilot', { method: 'POST', headers: { apikey: ANON, authorization: 'Bearer ' + t, 'content-type': 'application/json' }, body: JSON.stringify({ question }) });
+      const r = await fetch(SB + '/functions/v1/staff-copilot', { method: 'POST', headers: { apikey: ANON, authorization: 'Bearer ' + t, 'content-type': 'application/json' }, body: JSON.stringify({ question, hotel_id: HOTEL.id }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || 'The assistant could not answer just now.');
       return j.answer;
@@ -258,7 +321,7 @@
       const client = window.supabase.createClient(SB, ANON, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
       client.realtime.setAuth(await token());
       const ch = client.channel('alejo-live');
-      TABLES.forEach((table) => ch.on('postgres_changes', { event: '*', schema: 'public', table }, (p) => onChange(table, p)));
+      TABLES.forEach((table) => ch.on('postgres_changes', { event: '*', schema: 'public', table, filter: 'hotel_id=eq.' + HOTEL.id }, (p) => onChange(table, p)));
       ch.subscribe((status) => {
         connected = status === 'SUBSCRIBED';
         liveState = connected ? 'on' : 'off'; paintLive();
@@ -285,8 +348,37 @@
         const acct = document.getElementById('acct'), nm = document.getElementById('meName'), role = document.getElementById('meRole');
         if (acct) { acct.textContent = who.split(/[ @]/).filter(Boolean).map((p) => p[0].toUpperCase()).slice(0, 2).join(''); acct.title = who + ', ' + Alejo.me.role; }
         if (nm) nm.textContent = who;
-        if (role) role.textContent = Alejo.me.role.charAt(0).toUpperCase() + Alejo.me.role.slice(1);
+        if (role) role.textContent = Alejo.me.role === 'admin' ? 'Alejo admin' : Alejo.me.role.charAt(0).toUpperCase() + Alejo.me.role.slice(1);
       }
+      document.querySelectorAll('.nav a').forEach((a) => {          // links to pages this role cannot open leave the menu
+        const m = (a.getAttribute('href') || '').match(/\/(enquiries|ratings|knowledge|settings|team)\.html/);
+        if (m && !Alejo.can(m[1] === 'team' ? 'owner' : 'manager')) a.remove();
+      });
+      if (!Alejo.can('manager')) { const hd = document.querySelector('.nav .nav-h'); if (hd) hd.remove(); }
+      if (Alejo.denied) {                                           // landing on one anyway explains why, instead of an empty or failing page
+        const main = document.getElementById('main');
+        if (main) {
+          const box = document.createElement('div'), t = document.createElement('h1'), p = document.createElement('p');
+          box.className = 'title-row'; t.textContent = Alejo.deniedFor === 'owner' ? 'This page is for the hotel owner' : 'This page is for managers'; p.className = 'sub';
+          p.textContent = 'Your account cannot open this page. Ask ' + (Alejo.deniedFor === 'owner' ? 'the owner' : 'a manager or the owner') + ' if you need something changed here.';
+          const d = document.createElement('div'); d.append(t, p); box.append(d); main.replaceChildren(box);
+        }
+      }
+      const scope = document.querySelector('.scope');
+      if (scope && HOTEL) {
+        const nm2 = scope.querySelector('b'), where = scope.querySelector('span');
+        if (nm2) nm2.textContent = HOTEL.name;
+        if (where) where.textContent = (window.FD_FACTS && window.FD_FACTS.HOTEL_ADDRESS ? String(window.FD_FACTS.HOTEL_ADDRESS).slice(0, 38) : String(HOTEL.timezone || '').replace(/^.*\//, '').replace(/_/g, ' '));
+        document.querySelectorAll('.sub').forEach((el) => { el.textContent = el.textContent.replace('BrightSide Hotel', HOTEL.name); });
+      }
+      if (HOTELS.length > 1) {                                       // someone who works at several hotels (or Alejo's admin) picks which one is on screen
+        const pick = document.createElement('select'); pick.setAttribute('aria-label', 'Hotel'); pick.className = 'web-link';
+        HOTELS.forEach((h) => { const o = document.createElement('option'); o.value = h.id; o.textContent = h.name; if (h.id === HOTEL.id) o.selected = true; pick.append(o); });
+        pick.addEventListener('change', () => { try { localStorage.setItem(HKEY, pick.value); } catch (e) { /* private mode */ } location.reload(); });
+        slot.append(pick);
+      }
+      const pw = document.createElement('button'); pw.type = 'button'; pw.className = 'web-link'; pw.textContent = 'Change password'; pw.addEventListener('click', () => { passwordDialog(false); });
+      slot.append(pw);
       const b = document.createElement('button'); b.type = 'button'; b.className = 'web-link'; b.textContent = 'Sign out'; b.addEventListener('click', Alejo.signOut);
       slot.append(b);
     } else {
@@ -301,9 +393,12 @@
     const dressWhenReady = () => (document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', dress) : dress());
     if (!Alejo.signedIn()) { dressWhenReady(); return false; }
     try {
-      const [rows, me] = await Promise.all([fetchRows(), rest('staff_users?select=name,email,role&limit=1')]);
-      if (!me || !me.length) throw new Error('This account is not on the staff list.');
-      Alejo.me = me[0];
+      if (((await claims()).user_metadata || {}).must_change_password === true) await passwordDialog(true);     // nothing loads until they choose their own password
+      await chooseHotel();
+      const [rows, me] = await Promise.all([fetchRows(), loadMe()]);
+      Alejo.me = me;
+      const pageNeed = NEEDS[document.body && document.body.dataset.page];
+      Alejo.denied = !!pageNeed && !Alejo.can(pageNeed); Alejo.deniedFor = pageNeed;
       build(rows);
       Alejo.live = true; lastUpdate = new Date();
       dressWhenReady();

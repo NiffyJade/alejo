@@ -6,7 +6,8 @@ for (const n of ['Load booking', 'Pick my booking']) {
   try { const j = $(n).first().json; if (j && j.id) { b = j; break; } } catch (e) { /* that path did not run */ }
 }
 const s = Object.fromEntries($input.all().map(i => [i.json.key, (i.json.value || '').trim()]));
-const today = new Date(Date.now() + 3600 * 1000).toISOString().slice(0, 10);   // Africa/Lagos (UTC+1)
+const tz = (c.hotel || {}).timezone || 'Africa/Lagos';
+const today = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());   // YYYY-MM-DD on the hotel's clock
 const res = (text, patch) => [{ json: { chat_id: c.chat_id, text, patch: patch || null, booking_id: b.id || c.booking_id } }];
 if (!b.id || !b.guests || Number(b.guests.telegram_chat_id) !== Number(c.chat_id))
   return res(c.type === 'menu' && c.action === 'checkout'

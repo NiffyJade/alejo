@@ -1,5 +1,5 @@
 const u = $input.first().json;
-const STAFF = __STAFF__;
+const STAFF = Number(u.hotel && u.hotel.staff_chat_id);      // this hotel's staff group (the update carries its hotel)
 const clean = (s, re) => String(s || '').replace(re, '');
 let out = { type: 'ignore' };
 if (u.callback_query) {
@@ -55,4 +55,4 @@ if (u.callback_query) {
     else out = { type: 'guest_message', chat_id: m.chat.id, text: text.slice(0, 1000), from_name: fromName };
   }
 }
-return [{ json: out }];
+return [{ json: { ...out, hotel: u.hotel } }];

@@ -1,14 +1,15 @@
 // "Build prompt" (Telegram Bot, guest message path). Knowledge Q&A plus room availability / booking.
-// Placeholders __HOTEL__ and __MODEL__ are filled in by build_n8n_workflows.py.
+// The placeholder __MODEL__ is filled in by build_n8n_workflows.py. The hotel (name, timezone) comes with the guest's message.
 // Everything comes from ONE database call (the bot_context function): guest, booking draft, knowledge, settings, rooms, history.
 const data = $('Load context').first().json || {};
 const guest = data.guest || {};                         // {} when this chat is not linked to a guest yet
 const chat = $('Classify').first().json;
 const settings = Object.fromEntries(Object.entries(data.settings || {}).map(([k, v]) => [k, String(v || '').trim()]));
 const rooms = (data.rooms || []).filter(r => r.name).map(r => ({ name: r.name, rate: r.nightly_rate }));
-const lagos = new Date(Date.now() + 3600 * 1000);       // Africa/Lagos (UTC+1)
-const today = lagos.toISOString().slice(0, 10);
-const weekday = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][lagos.getUTCDay()];
+const tz = (chat.hotel || {}).timezone || 'Africa/Lagos';             // the hotel's own clock
+const hotelName = settings.HOTEL_NAME || (chat.hotel || {}).name || 'the hotel';
+const today = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());       // YYYY-MM-DD
+const weekday = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' }).format(new Date());
 
 // What this person has already told us about a booking (ignored after 6 hours)
 const dr = data.draft || {};
@@ -40,7 +41,7 @@ const pidgin = /\b(abeg|wetin|wahala|dey|una|oga|sabi|chop|comot|pikin|wey|sef|a
 const langLine = pidgin
   ? `The guest wrote in Nigerian Pidgin, so write your whole answer in simple, warm, respectful Nigerian Pidgin (words like "dey", "na", "o", "no wahala", "make", "una", "wan", "for here"), not in standard English. Rewrite the knowledge in Pidgin: do not copy its English sentences, and do not start with plain English; but keep every fact (names, times, prices, numbers, passwords) exactly as given. Examples of the STYLE only, never of facts: guest "abeg which time gym dey open?" with knowledge "The gym is open 6:00 AM to 9:00 PM" -> "No wahala! The gym dey open from 6:00 AM to 9:00 PM every day." Guest "una get parking?" with knowledge "Guest parking is available on site" -> "Yes o, parking dey for here. Just tell the front desk your car details when you reach." Guest "una dey serve dinner?" with knowledge "Dinner is served from 7:00 PM to 10:00 PM" -> "Yes o, we dey serve dinner from 7:00 PM to 10:00 PM." Guest "wetin be the wifi password?" with knowledge "Network HotelNet, password abc12345" -> "Na HotelNet be the Wi-Fi, and the password na abc12345."`
   : `The guest wrote in English, so answer in clear, simple English.`;
-const system = `You are the virtual receptionist for ${settings.HOTEL_NAME || '__HOTEL__'}, a hotel in Nigeria, chatting with a guest on Telegram.
+const system = `You are the virtual receptionist for ${hotelName}, a hotel in Nigeria, chatting with a guest on Telegram.
 RULES:
 - Answer ONLY from the KNOWLEDGE and GUEST CONTEXT below. Never invent facts, prices, times, names, phone numbers or policies.
 - If the answer is not in the knowledge, set can_answer to false and leave answer empty. If your reply would only say you do not know or cannot help, that also means can_answer false with an empty answer.
@@ -59,7 +60,7 @@ ROOM AVAILABILITY AND BOOKING (handled by the system from live room data, never 
 - When notify_staff is true, also say what kind of thing it is. "kind": "request" when the guest asks staff to DO something (towels, cleaning, repair, food, a ride, late checkout, changing a booking); "complaint" when they report something wrong or unhappy (broken AC, noise, dirty room, rude service, no water or power); "emergency" for danger to life, fire, medical trouble or a security threat; "question" for anything else staff just need to answer. "category": "maintenance" (repairs, AC, power, water, Wi-Fi equipment), "housekeeping" (cleaning, towels, linen), "food" (restaurant, room service), "transport" (airport pickup, taxi), "booking" (changes, cancellations, refunds, payments) or "other". When notify_staff is false use kind "question" and category null.
 Reply with JSON only: {"intent": "info"|"availability"|"book"|"cancel_draft"|"other", "can_answer": true|false, "notify_staff": true|false, "kind": "question"|"request"|"complaint"|"emergency", "category": null, "answer": "text for the guest", "check_in": null, "check_out": null, "room_type": null, "guest_name": null, "phone": null}
 
-TODAY: ${today} (${weekday}), Africa/Lagos.
+TODAY: ${today} (${weekday}), ${tz}.
 
 ROOM TYPES: ${rooms.length ? rooms.map(r => r.name).join(', ') : 'none listed'}
 
@@ -78,5 +79,5 @@ messages.push({ role: 'user', content: userText });
 return [{ json: { chat_id: chat.chat_id, text: chat.text || '', from_name: chat.from_name || '',
   guest_id: guest.id || '', guest_name: guest.name || '', guest_phone: guest.phone || '',
   booking_id: b ? b.id : null, room: b && b.room_number || '',
-  today, rooms, draft, hotel: settings.HOTEL_NAME || '__HOTEL__', open_items: data.open_items || [],
+  today, rooms, draft, hotel: hotelName, open_items: data.open_items || [],
   body: { model: '__MODEL__', temperature: 0, messages, response_format: { type: 'json_object' } } } }];

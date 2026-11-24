@@ -268,7 +268,7 @@
         drafts[c.id] = ta.value;
         if (LIVE && c.escId && ta.value.trim() && Date.now() - lastPing > 4000) { lastPing = Date.now(); window.Alejo.typing(c.escId).catch(() => {}); }
       });
-      const keep = h('input', { type: 'checkbox', id: 'keep' }); keep.checked = st === 'needs' && (!!c.suggest || LIVE);                // live: answers become Facts by default (untick for an answer about one guest only)
+      const keep = h('input', { type: 'checkbox', id: 'keep' }); const canTeach = !LIVE || window.Alejo.can('manager'); keep.checked = canTeach && st === 'needs' && (!!c.suggest || LIVE);                // live: answers become Facts by default (untick for an answer about one guest only)
       const sendBtn = h('button', { class: 'btn', type: 'button', onclick: async () => {
         const text = ta.value.trim(); if (!text) { ta.focus(); return; }
         if (LIVE) {
@@ -286,7 +286,7 @@
         drafts[c.id] = undefined; save(); paint(); $('#live').textContent = `Reply sent to ${c.guest.split(' ')[0]}. ${needs().length} still need you.`;
       } }, 'Send reply');
       const composer = h('div', { class: 'composer' }, ta,
-        h('div', { class: 'row2' }, st === 'needs' && !c.fact ? h('label', { class: 'check', for: 'keep' }, keep, LIVE ? 'Save as an answer for future guests' : 'Save my answer to Facts') : h('span', { class: 'sub', text: '' }), sendBtn));
+        h('div', { class: 'row2' }, st === 'needs' && !c.fact && canTeach ? h('label', { class: 'check', for: 'keep' }, keep, LIVE ? 'Save as an answer for future guests' : 'Save my answer to Facts') : h('span', { class: 'sub', text: '' }), sendBtn));
       if (LIVE && !c.escId) { ta.disabled = true; ta.value = ''; ta.placeholder = c.phone && st === 'needs' ? 'Phone caller: call ' + c.phone + ' back, then press Resolve.' : 'Nothing is waiting for a reply here.'; sendBtn.disabled = true; }
       pane.replaceChildren(head, need, h('div', { class: 'thread', id: 'thread', tabindex: '0', 'aria-label': 'Conversation' }, bubbles), composer);
       const th = $('#thread'); th.scrollTop = th.scrollHeight;

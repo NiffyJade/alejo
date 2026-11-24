@@ -146,7 +146,7 @@
     }));
     const payList = (b.payments || []).map((p) => h('div', { class: 'mpay' },
       h('span', {}, `${p.amount < 0 ? 'Refund ' : ''}${FD.naira(Math.abs(p.amount))}`, h('small', { text: [p.method, p.note].filter(Boolean).map((s) => ' ' + s).join(' ·') })),
-      h('small', { text: new Date(p.at).toLocaleString('en-GB', { timeZone: 'Africa/Lagos', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) })));
+      h('small', { text: new Date(p.at).toLocaleString('en-GB', { timeZone: ((window.Alejo && window.Alejo.hotel && window.Alejo.hotel() && window.Alejo.hotel().timezone) || 'Africa/Lagos'), day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) })));
 
     // check in / out and cancel
     const actions = [];
@@ -168,7 +168,7 @@
       actions.push(outBtn);
     }
     let cancelBox = null;
-    if (b.status === 'booked') {
+    if (b.status === 'booked' && A.can('manager')) {                 // cancelling is a manager's call (the database enforces it too)
       const reason = input({ type: 'text', maxlength: 200, 'aria-label': 'Reason for cancelling', placeholder: 'Reason (optional), for example guest called' });
       const confirmBtn = h('button', { class: 'btn danger', type: 'button', text: 'Yes, cancel this booking' });
       confirmBtn.addEventListener('click', () => run(confirmBtn, err, async () => {
@@ -230,7 +230,7 @@
 
   /* ---------- wiring ---------- */
   $('#bnew').hidden = false;
-  $('#blocksSec').hidden = false;
+  $('#blocksSec').hidden = !A.can('manager');                           // blocking rooms is a manager's call
   $('#bnew').addEventListener('click', openNew);
   $('#bblock').addEventListener('click', openBlock);
   const rows = $('#bbody');

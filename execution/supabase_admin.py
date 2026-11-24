@@ -6,8 +6,9 @@ Usage (run from the project root; credentials come from .env and are never print
   python execution/supabase_admin.py secrets NAME=VALUE ...      (values may be ENV:NAME to copy from .env)
   python execution/supabase_admin.py query "select count(*) from demo_requests"
   python execution/supabase_admin.py anon-key                      (the public anon key; safe to embed in the dashboard)
-  python execution/supabase_admin.py staff-user EMAIL "Name" [owner|manager|staff] [--reset]
-                                                                   (creates the login + staff_users row, prints a one-time password)
+  python execution/supabase_admin.py staff-user EMAIL "Name" [owner|manager|staff] [--reset] [--hotel=SLUG]
+                                                                   (creates the login + the staff row for that hotel (default brightside),
+                                                                    prints a one-time password; needs sql/021 applied)
   python execution/supabase_admin.py disable-signup                (only staff created here can sign in)
 
 Needs SUPABASE_URL and SUPABASE_ACCESS_TOKEN in .env. Edge functions are deployed with verify_jwt off unless
@@ -45,6 +46,20 @@ REF = ENV["SUPABASE_URL"].split("//")[1].split(".")[0]
 TOKEN = ENV["SUPABASE_ACCESS_TOKEN"]
 
 
+
+def _open(req, timeout):
+    """urlopen that retries a dropped connection (this network resets connections now and then); HTTP errors are NOT retried."""
+    import time
+    for attempt in range(4):
+        try:
+            return urllib.request.urlopen(req, timeout=timeout)
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
+            if attempt == 3:
+                raise
+            time.sleep(2 + attempt * 2)
+
 def call(method, path, body=None, headers=None, raw=False):
     h = {"authorization": f"Bearer {TOKEN}", "user-agent": UA, **(headers or {})}
     data = body
@@ -53,7 +68,7 @@ def call(method, path, body=None, headers=None, raw=False):
         h["content-type"] = "application/json"
     req = urllib.request.Request(API + path, data=data, method=method, headers=h)
     try:
-        with urllib.request.urlopen(req, timeout=90) as r:
+        with _open(req, 90) as r:
             txt = r.read().decode("utf-8", "replace")
             return r.status, (json.loads(txt) if txt.strip()[:1] in "[{" else txt)
     except urllib.error.HTTPError as e:
@@ -114,17 +129,21 @@ def auth_admin(method, path, body=None):
                                  data=json.dumps(body).encode() if body is not None else None,
                                  headers={"apikey": key, "authorization": f"Bearer {key}", "content-type": "application/json", "user-agent": UA})
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
+        with _open(req, 60) as r:
             return r.status, json.loads(r.read().decode() or "{}")
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode("utf-8", "replace")
 
 
-def staff_user(email, name="", role="staff", reset=False):
+def staff_user(email, name="", role="staff", reset=False, hotel="brightside"):
     if not re.fullmatch(r"[^\s@'\"]+@[^\s@'\"]+\.[^\s@'\"]+", email) or role not in ("staff", "manager", "owner"):
         sys.exit("bad email or role")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,38}", hotel):
+        sys.exit("bad hotel slug")
+    if not run_sql(f"select 1 from hotels where slug = '{hotel}'"):
+        sys.exit(f"no hotel with slug '{hotel}' (needs sql/021_multi_hotel.sql applied, and the hotel created)")
     password = secrets.token_urlsafe(12)
-    status, out = auth_admin("POST", "/users", {"email": email, "password": password, "email_confirm": True})
+    status, out = auth_admin("POST", "/users", {"email": email, "password": password, "email_confirm": True, "user_metadata": {"must_change_password": True}})
     if status in (200, 201):
         shown = password
     elif status == 422 and reset:
@@ -132,7 +151,7 @@ def staff_user(email, name="", role="staff", reset=False):
         uid = next((u["id"] for u in users.get("users", []) if u["email"].lower() == email.lower()), None)
         if not uid:
             sys.exit("user not found for reset")
-        status, out = auth_admin("PUT", f"/users/{uid}", {"password": password})
+        status, out = auth_admin("PUT", f"/users/{uid}", {"password": password, "user_metadata": {"must_change_password": True}})
         if status >= 300:
             sys.exit(f"reset failed ({status}): {str(out)[:300]}")
         shown = password
@@ -141,8 +160,8 @@ def staff_user(email, name="", role="staff", reset=False):
     else:
         sys.exit(f"create user failed ({status}): {str(out)[:300]}")
     safe_name = name.replace("'", "''")
-    run_sql(f"insert into staff_users (email, name, role) values ('{email.lower()}', '{safe_name}', '{role}') "
-            f"on conflict (email) do update set name = excluded.name, role = excluded.role")
+    run_sql(f"insert into staff_users (hotel_id, email, name, role) select id, '{email.lower()}', '{safe_name}', '{role}' from hotels where slug = '{hotel}' "
+            f"on conflict (hotel_id, email) do update set name = excluded.name, role = excluded.role")
     return shown
 
 
@@ -160,7 +179,8 @@ if __name__ == "__main__":
     elif a[0] == "anon-key":
         print(anon_key())
     elif a[0] == "staff-user":
-        pw = staff_user(a[1], a[2] if len(a) > 2 and not a[2].startswith("--") else "", a[3] if len(a) > 3 and not a[3].startswith("--") else "staff", "--reset" in a)
+        hotel = next((x.split("=", 1)[1] for x in a if x.startswith("--hotel=")), "brightside")
+        pw = staff_user(a[1], a[2] if len(a) > 2 and not a[2].startswith("--") else "", a[3] if len(a) > 3 and not a[3].startswith("--") else "staff", "--reset" in a, hotel)
         print("staff user ready:", a[1], "| one-time password:", pw if pw else "(account already existed, password unchanged; use --reset)")
     elif a[0] == "disable-signup":
         st, out = call("PATCH", f"/projects/{REF}/config/auth", {"disable_signup": True})

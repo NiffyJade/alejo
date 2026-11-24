@@ -2,7 +2,8 @@
 // Run: node execution/telegram_booking_js/test_menu.js   (the booking conversation tests are in test.js)
 const fs = require('fs'), path = require('path'), assert = require('assert');
 const load = f => fs.readFileSync(path.join(__dirname, f), 'utf8').replace('// __LANG__', fs.readFileSync(path.join(__dirname, 'lang.js'), 'utf8'))
-  .replace(/__HOTEL__/g, 'BrightSide Hotel').replace(/__MODEL__/g, 'm').replace(/__STAFF__/g, '-100999');
+  .replace(/__MODEL__/g, 'm');
+const HOTEL = { id: 'h-test', slug: 'test', name: 'BrightSide Hotel', timezone: 'Africa/Lagos', staff_chat_id: -100999 };   // the hotel every update carries
 function run(file, nodes, input) {
   const wrap = list => ({ first: () => ({ json: list[0] }), all: () => list.map(j => ({ json: j })) });
   const $ = name => { if (!(name in nodes)) throw new Error('no node ' + name); return wrap(nodes[name]); };

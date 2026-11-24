@@ -3,7 +3,7 @@
 const fs = require('fs'), assert = require('assert');
 const src = fs.readFileSync(__dirname + '/../supabase/functions/staff-copilot/index.ts', 'utf8');
 const block = src.slice(src.indexOf('// ---- pure:start'), src.indexOf('// ---- pure:end'));
-const { buildSnapshot, buildPrompt } = new Function('MODEL', block + '\nreturn { buildSnapshot, buildPrompt, lagosParts };')('test-model');
+const { buildSnapshot, buildPrompt } = new Function('MODEL', block + '\nreturn { buildSnapshot, buildPrompt, localParts };')('test-model');
 const NOW = Date.parse('2026-10-27T01:31:00Z');                     // 02:31 Lagos
 const ago = (m) => new Date(NOW - m * 60000).toISOString();
 const rows = {

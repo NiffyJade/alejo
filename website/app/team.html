@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Team · Alejo staff dashboard</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f3f5fa">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://api.fontshare.com">
+<link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body data-page="team">
+<a class="skip" href="#main">Skip to content</a>
+<div class="app">
+<aside class="side" id="side" aria-label="Dashboard">
+  <a class="brand" href="/app/index.html" aria-label="Alejo, today"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0z" fill="#111"/><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="#111"/><circle cx="12" cy="6.2" r="2" fill="#1a4be0"/></svg><span class="brand-t"><b translate="no">Alejo</b></span></a>
+  <div class="scope"><b>BrightSide Hotel</b><span>Lagos, Nigeria</span></div>
+  <nav class="nav" aria-label="Pages"><a href="/app/index.html">Today</a><a href="/app/inbox.html">Inbox <i class="cnt" id="needCount" role="img" aria-label="guests need you">3</i></a><a href="/app/enquiries.html">Enquiries</a><a href="/app/ratings.html">Ratings</a><a href="/app/bookings.html">Bookings</a><p class="nav-h">Your hotel</p><a href="/app/knowledge.html">Facts</a><a href="/app/settings.html">Settings</a><a href="/app/team.html" aria-current="page">Team</a></nav>
+  <div class="side-foot">
+    <div class="links"><a class="web-link" href="/">Website</a><span id="authSlot"></span></div>
+    <div class="me"><span class="acct" id="acct" title="Amaka Okafor, front desk">AO</span><span><b id="meName">Amaka Okafor</b><small id="meRole">Front desk, nights</small></span></div>
+  </div>
+</aside>
+<div class="scrim" id="scrim"></div>
+<div class="frame-main">
+  <header class="top">
+    <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="side">Menu</button>
+    <span class="top-name" translate="no">Alejo</span>
+    <div class="search"><label class="sr" for="q">Search</label><input id="q" name="q" type="search" placeholder="Search stays…" autocomplete="off" spellcheck="false"><kbd aria-hidden="true">/</kbd></div>
+    <span class="demo-note" id="demoNote">Sample data, Tue 27 Oct, 02:31</span>
+  </header>
+<main class="sheet" id="main">
+  <div class="title-row">
+    <div><h1>Team</h1><p class="sub">Who can sign in to Alejo for this hotel, and what each person can do.</p></div>
+  </div>
+  <p class="foot-note" id="tstatus" role="status"></p>
+  <p class="merr" id="terr" role="alert"></p>
+  <section class="eqsec" aria-labelledby="h-people">
+    <h2 id="h-people">People</h2>
+    <div class="tbl" role="table" aria-label="Team">
+      <div class="th team-cols" role="row"><div>Person</div><div>Role</div><div></div></div>
+      <div id="tlist"></div>
+    </div>
+  </section>
+  <section class="eqsec" aria-labelledby="h-add">
+    <h2 id="h-add">Add a person</h2>
+    <form id="tadd" class="team-add" autocomplete="off">
+      <label class="mfield"><span>Name</span><input class="minput" name="pname" maxlength="80" required></label>
+      <label class="mfield"><span>Email</span><input class="minput" name="pemail" type="email" maxlength="120" required></label>
+      <label class="mfield"><span>Role</span><select class="minput" name="prole"><option value="staff">Staff</option><option value="manager">Manager</option><option value="owner">Owner</option></select></label>
+      <button class="btn" type="submit">Add</button>
+    </form>
+    <p class="hint">You get a one-time password to hand over. They choose their own the first time they sign in.</p>
+  </section>
+  <section class="eqsec" aria-labelledby="h-roles">
+    <h2 id="h-roles">What each role can do</h2>
+    <dl class="team-roles">
+      <dt>Staff</dt><dd>Answer guests in the Inbox, see bookings, add a walk-in booking, check guests in and out, set a room number and record payments.</dd>
+      <dt>Manager</dt><dd>Everything staff can do, plus change Settings and Facts, cancel bookings, block rooms, and read the Ratings and Enquiries reports.</dd>
+      <dt>Owner</dt><dd>Everything a manager can do, plus manage this team. A hotel always keeps at least one owner, and you cannot change your own role or remove yourself.</dd>
+    </dl>
+  </section>
+</main>
+</div>
+</div>
+
+<dialog id="mdlg" class="mdlg" aria-labelledby="mdt"><div class="mhead"><h2 id="mdt"></h2><button class="btn line small" type="button" id="mclose">Close</button></div><div id="mbody"></div></dialog>
+<script src="/app/data.js"></script>
+<script src="/app/live.js"></script>
+<script src="/app/app.js"></script>
+<script src="/app/team.js"></script>
+</body>
+</html>
