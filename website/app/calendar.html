@@ -9,7 +9,7 @@
 <meta name="color-scheme" content="light">
 <link rel="preconnect" href="https://api.fontshare.com">
 <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
-<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app/app.css">
 </head>
 <body data-page="calendar">
@@ -36,15 +36,6 @@
   <div class="title-row">
     <div><h1>Calendar</h1><p class="sub">Pick any date to see how many rooms are free, and who is staying, arriving or leaving.</p></div>
   </div>
-
-  <section class="calcheck" aria-labelledby="h-check">
-    <h2 id="h-check">Is there a room for these nights?</h2>
-    <form class="calcheck-f" id="ccheck" autocomplete="off">
-      <label class="mfield"><span>Check-in</span><input class="minput" type="date" id="cin" required></label>
-      <label class="mfield"><span>Check-out</span><input class="minput" type="date" id="cout" required></label>
-    </form>
-    <div class="calcheck-r" id="cresult" role="status" aria-live="polite"></div>
-  </section>
 
   <div class="calbar">
     <div class="calnav">

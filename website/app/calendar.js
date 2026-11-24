@@ -134,27 +134,8 @@
   };
   typeSel.addEventListener('change', () => { type = typeSel.value; renderGrid(); renderDay(); });
 
-  /* ---------- "is there a room for these nights?" ---------- */
-  const cin = $('#cin'), cout = $('#cout'), cres = $('#cresult');
-  const renderCheck = () => {
-    if (!isDate(cin.value) || !isDate(cout.value)) { cres.replaceChildren(); return; }
-    if (cout.value <= cin.value) { cres.replaceChildren(h('p', { class: 'merr', text: 'Check-out must be after check-in.' })); return; }
-    const rows = C.freeForRange(cin.value, cout.value, ctx()), nights = C.toNum(cout.value) - C.toNum(cin.value);
-    const any = rows.some((r) => r.free > 0);
-    cres.replaceChildren(
-      h('p', { class: 'foot-note', text: `${FD.fmtDay(cin.value)} to ${FD.fmtDay(cout.value)}, ${plural(nights, 'night', 'nights')}. ${any ? '' : 'Every room type is taken on at least one of these nights.'}` }),
-      ...rows.map((r) => h('div', { class: 'brow' },
-        h('div', {}, h('b', { text: r.name }), h('small', { text: r.rate ? `${naira(r.rate)} a night, ${naira(r.total)} for ${plural(nights, 'night', 'nights')}` : '' })),
-        h('span', { class: 'pill ' + (r.free ? 'pos' : 'neg'), text: r.free ? `${r.free} free` : 'None free' }))));
-  };
-  const t0 = FD.NOW.date;
-  cin.min = t0; cout.min = C.addDays(t0, 1);
-  cin.value = t0; cout.value = C.addDays(t0, 1);
-  cin.addEventListener('change', () => { if (isDate(cin.value) && (!isDate(cout.value) || cout.value <= cin.value)) cout.value = C.addDays(cin.value, 1); cout.min = isDate(cin.value) ? C.addDays(cin.value, 1) : cout.min; renderCheck(); });
-  cout.addEventListener('change', renderCheck);
-
   /* ---------- go ---------- */
-  fillTypes(); renderGrid(); renderDay(); renderCheck();
+  fillTypes(); renderGrid(); renderDay();
   $('#cgo').value = sel;
-  addEventListener('alejo:data', () => { fillTypes(); renderGrid(); renderDay(); renderCheck(); });      // a booking arrived or changed: the calendar follows
+  addEventListener('alejo:data', () => { fillTypes(); renderGrid(); renderDay(); });      // a booking arrived or changed: the calendar follows
 })();

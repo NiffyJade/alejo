@@ -100,7 +100,7 @@
       const nights = dayNum(b.check_out) - dayNum(b.check_in);
       const pays = paidBy[b.id] || [];
       return { id: b.id, ref: b.id.slice(0, 8).toUpperCase(), code: String(b.stay_code || ''), guest: g.name, guestId: g.id, room: b.room_number || 'not assigned', type: b.room_type || 'Room', in: b.check_in, out: b.check_out,
-        created: b.created_at, src: SRC[b.source] || (g.telegram_chat_id ? 'Telegram' : 'Phone'), source: b.source || '', status: b.status, rating: b.rating || null, roomNo: b.room_number || '',
+        created: b.created_at, phone: g.phone || '', src: SRC[b.source] || (g.telegram_chat_id ? 'Telegram' : 'Phone'), source: b.source || '', status: b.status, rating: b.rating || null, roomNo: b.room_number || '',
         payments: pays, paid: pays.reduce((s, p) => s + p.amount, 0), stage, note: when[0] + ' ' + stamp(when[1]), linked: !!g.telegram_chat_id, hue: hue(g.name), nights, total: nights * (RATES[b.room_type] || 0) };
     });
     const byGuest = {};

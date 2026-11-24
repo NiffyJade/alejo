@@ -9,7 +9,7 @@
 <meta name="color-scheme" content="light">
 <link rel="preconnect" href="https://api.fontshare.com">
 <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
-<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app/app.css">
 </head>
 <body data-page="bookings">
@@ -35,29 +35,34 @@
 <main class="sheet" id="main">
   <div class="title-row">
     <div><h1>Bookings</h1><p class="sub">Every stay, from booking to thank-you.</p></div>
-    <div class="actions"><button class="btn" type="button" id="bnew" hidden>New booking</button><button class="btn line" type="button" id="bexport">Export CSV</button></div>
+    <div class="actions"><button class="btn" type="button" id="bnew" hidden>New booking</button><button class="btn line" type="button" id="bexport"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>Export CSV</button></div>
   </div>
-  <section class="verify" aria-labelledby="h-verify">
-    <div><h2 id="h-verify">Verify a guest</h2><p>Ask the guest for their private stay code, then type it here to see whose stay it belongs to. Use it before handing over a key, charging a room or sharing booking details.</p></div>
-    <form class="vform" id="vform" autocomplete="off"><label class="sr" for="vcode">Stay code</label><input class="field" id="vcode" inputmode="numeric" maxlength="9" placeholder="6-digit stay code" spellcheck="false" autocomplete="off"><button class="btn" type="submit">Verify</button></form>
+  <section class="verify verify-bar" aria-labelledby="h-verify">
+    <div class="vtext"><h2 id="h-verify">Verify a guest</h2><p>Ask for their private stay code before handing over a key, charging a room or sharing booking details.</p></div>
+    <form class="vform" id="vform" autocomplete="off"><label class="sr" for="vcode">6-digit stay code</label><input class="field" id="vcode" inputmode="numeric" maxlength="9" placeholder="6-digit stay code" spellcheck="false" autocomplete="off"><button class="btn" type="submit">Verify</button></form>
     <div class="vres" id="vresult" role="status" aria-live="polite"></div>
   </section>
-  <div class="sum" id="bsum" aria-label="Today"></div>
-  <div class="tabs" role="tablist" id="btabs" aria-label="Views"></div>
-  <div class="toolbar">
-    <label class="sr" for="bq">Search stays</label><input class="field" id="bq" type="search" placeholder="Search guest, room or reference…" autocomplete="off" spellcheck="false">
-    <div class="meta"><span id="bmeta"></span><label class="sr" for="bsort">Sort by</label><select id="bsort" name="sort"><option value="prio">Sort: today first</option><option value="in">Sort: check-in</option><option value="name">Sort: name</option><option value="total">Sort: total</option></select></div>
-  </div>
-  <div class="tbl" role="table" aria-label="Stays">
-    <div class="th cols-b" role="row"><div>Guest</div><div>Room</div><div>Dates</div><div>Stay journey</div><div>Source</div><div class="num">Total</div></div>
-    <div id="bbody"></div>
+  <div class="sum tiles" id="bsum" role="group" aria-label="Today, choose one to filter the list"></div>
+  <div class="bk-layout">
+    <section class="bk-list" aria-label="Stays">
+      <div class="tabs" role="tablist" id="btabs" aria-label="Views"></div>
+      <div class="toolbar">
+        <label class="sr" for="bq">Search stays</label><input class="field" id="bq" type="search" placeholder="Guest, room or reference" autocomplete="off" spellcheck="false">
+        <div class="meta"><span id="bmeta"></span><label class="sr" for="bsort">Sort by</label><select id="bsort" name="sort"><option value="prio">Sort: today first</option><option value="in">Sort: check-in</option><option value="name">Sort: name</option><option value="total">Sort: total</option></select></div>
+      </div>
+      <div class="tbl" aria-label="Stays">
+        <div class="th cols-b" aria-hidden="true"><div>Guest</div><div>Room</div><div>Dates</div><div>Status</div><div class="num">Total</div></div>
+        <div id="bbody"></div>
+      </div>
+    </section>
+    <aside class="bk-detail" id="bdetail" aria-label="Selected stay" tabindex="-1"></aside>
   </div>
   <section class="blocks" id="blocksSec" aria-labelledby="h-blocks" hidden>
     <div class="blocks-h"><div><h2 id="h-blocks">Blocked rooms</h2><p>Rooms taken out of sale for repairs, a hold, or bookings made on other platforms. The Telegram bot, the phone line and the desk all see them.</p></div><button class="btn line" type="button" id="bblock">Block rooms</button></div>
     <div id="blist"></div>
   </section>
   <p class="sr" id="mstatus" role="status" aria-live="polite"></p>
-  <p class="foot-note">Totals are nights times the room rate. The journey shows booked, reminder, checked in, checkout reminder, checked out, thanked. Stay codes go only to guests on Telegram, from the day they check in; guests who booked by phone and are not on Telegram have no code, so check their ID and reference instead.</p>
+  <p class="foot-note">Totals are nights times the room rate. Reminders and the thank-you are sent automatically, so only check-in and check-out need a person. Stay codes go only to guests on Telegram, from the day they check in; guests who booked by phone and are not on Telegram have no code, so check their ID and reference instead.</p>
 </main>
 </div>
 </div>
@@ -65,6 +70,7 @@
 
 <script src="/app/data.js"></script>
 <script src="/app/live.js"></script>
+<script src="/app/stay-core.js"></script>
 <script src="/app/app.js"></script>
 <script src="/app/manage.js"></script>
 </body>

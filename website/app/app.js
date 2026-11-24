@@ -331,25 +331,76 @@
     };
     compute();
     const labels = [['arriving', 'Arriving today'], ['inhouse', 'In house'], ['leaving', 'Leaving today'], ['all', 'All']];
-    const payInfo = (b) => (b.total > 0 ? (b.paid >= b.total ? ['pos', 'Paid in full'] : b.paid > 0 ? ['part', 'Paid ' + FD.naira(b.paid)] : ['neg', 'Unpaid']) : ['', '']);
+    const ST = window.AlejoStay;
+    const PILL = ['', 'ai', 'pos', 'warn', '', ''];                 // pill colour for each journey stage; the word is always shown too
+    let sel = null;                                                 // the stay shown in the panel (its id)
+    const payInfo = (b) => { const p = ST.pay(b); return p.state === 'none' ? ['', ''] : p.state === 'paid' ? ['pos', 'Paid in full'] : p.state === 'part' ? ['part', 'Paid ' + FD.naira(p.paid)] : ['neg', 'Unpaid']; };
+    const pickTab = (id) => () => { tab = id; remember('tab', id); paintSum(); paint(); };
+    const tile = (id, n, label) => h('button', { class: 'tile' + (tab === id ? ' on' : ''), type: 'button', 'aria-pressed': String(tab === id), onclick: pickTab(id) }, h('b', { text: String(n) }), h('span', { text: label }));
     const paintSum = () => $('#bsum').replaceChildren(
-      ...[[sets.arriving.length, 'arriving today'], [sets.inhouse.length, 'in house'], [sets.leaving.length, 'leaving today'], [FD.naira(sets.arriving.reduce((s, b) => s + b.total, 0)), 'booked for today\'s arrivals']]
-        .map(([n, t]) => h('div', {}, h('b', { text: String(n) }), h('span', { text: t }))));
+      tile('arriving', sets.arriving.length, 'arriving today'), tile('inhouse', sets.inhouse.length, 'in house'), tile('leaving', sets.leaving.length, 'leaving today'),
+      h('button', { class: 'tile', type: 'button', onclick: pickTab('arriving') }, h('b', { text: FD.naira(sets.arriving.reduce((s, b) => s + b.total, 0)) }), h('span', { text: 'booked for today\'s arrivals' })));
+
+    const phoneOf = (b) => (b.phone || '').replace(/[^\d+]/g, '');
+    const detailEl = $('#bdetail');
+    const paintDetail = (b) => {
+      if (!b) { detailEl.replaceChildren(h('p', { class: 'foot-note', text: 'No stay selected. Choose a stay in the list to see its details.' })); return; }
+      const pay = ST.pay(b), main = ST.primary(b, today), nt = ST.note(b), nights = `${b.nights} night${b.nights === 1 ? '' : 's'}`, tel = phoneOf(b);
+      const kv = (k, v) => h('div', {}, h('dt', { text: k }), h('dd', { text: v }));
+      const off = LIVE ? false : true;                              // the public sample cannot change a stay
+      const act = (cls, label, a, extra) => h('button', Object.assign({ class: 'btn ' + cls, type: 'button', 'data-act': a, 'data-sid': b.id, disabled: off }, extra || {}), label);
+      detailEl.replaceChildren(...[
+        h('div', { class: 'sd-head' }, disc(b.guest, b.hue, 'big'),
+          h('div', {}, h('h2', { text: b.guest }), h('small', { text: b.ref }))),
+        h('span', { class: 'pill sd-pill ' + PILL[b.stage], text: FD.STAGE_WORD[b.stage] }),
+        h('dl', { class: 'sd-kv' }, kv('Room', `${b.type}, room ${b.room}`), kv('Booked via', b.src), kv('Dates', `${FD.fmtDay(b.in)} to ${FD.fmtDay(b.out)}`), kv('Length', nights),
+          kv('Total', FD.naira(b.total)), tel ? h('div', {}, h('dt', { text: 'Phone' }), h('dd', {}, h('a', { href: 'tel:' + tel, text: b.phone }))) : null),
+        LIVE && pay.state !== 'none' ? h('div', { class: 'sd-pay ' + pay.state }, h('div', { class: 'sd-pay-t' }, h('b', { text: pay.state === 'paid' ? 'Paid in full' : pay.state === 'unpaid' ? 'Nothing paid yet' : `Paid ${FD.naira(pay.paid)} of ${FD.naira(pay.total)}` }),
+          pay.balance > 0 ? h('span', { text: 'Balance ' + FD.naira(pay.balance) }) : null), h('i', { class: 'sd-bar', 'aria-hidden': 'true' }, h('b', { style: 'width:' + pay.pct + '%' }))) : null,
+        h('p', { class: 'sd-note ' + nt.tone, text: nt.text }),
+        h('div', {}, h('h3', { text: 'Stay journey' }), h('ol', { class: 'sd-steps' }, ST.steps(b).map((s) => h('li', { class: s.state },
+          h('span', { class: 'dot', 'aria-hidden': 'true', text: s.state === 'done' ? '✓' : '' }),
+          h('span', { class: 'lbl' }, s.label, s.state === 'now' && b.note ? h('small', { text: b.note }) : null),
+          h('span', { class: 'tag', text: s.tag })))),
+          h('p', { class: 'sd-auto', text: 'Reminders and the thank-you are sent automatically.' })),
+        h('div', { class: 'sd-actions' },
+          main ? act('', main.label, main.act, { 'data-early': main.early ? '1' : false }) : null,
+          b.linked === false ? (tel ? h('a', { class: 'btn line', href: 'tel:' + tel, text: 'Call guest' }) : h('p', { class: 'foot-note', text: 'Not on Telegram yet and no phone number saved.' })) : h('a', { class: 'btn line', href: '/app/inbox.html?c=' + encodeURIComponent(b.guestId), text: 'Message guest on Telegram' }),
+          act('line', 'Manage stay: room, payments, cancel', 'manage')),
+        off ? h('p', { class: 'foot-note', text: 'Sample data. Sign in to check guests in and out and to manage stays.' }) : null].filter(Boolean));   // an absent part must not print as "null"
+    };
+    const select = (id, opts) => {
+      sel = id;
+      let on = null;
+      body.querySelectorAll('.tr').forEach((r) => { const is = r.dataset.sid === id; r.classList.toggle('on', is); r.setAttribute('aria-pressed', String(is)); if (is) on = r; });
+      paintDetail(B.find((x) => x.id === id));
+      if (opts && opts.focus && on) on.focus();
+      if (opts && opts.reveal && matchMedia('(max-width: 1279px)').matches) detailEl.scrollIntoView({ block: 'start' });   // the panel sits under the list on narrow screens
+    };
     const paint = () => {
-      tabsEl.replaceChildren(...labels.map(([id, l]) => h('button', { class: 'tab', role: 'tab', type: 'button', 'aria-selected': String(tab === id), onclick: () => { tab = id; remember('tab', id); paint(); } }, l, h('span', { class: 'n', text: String(sets[id].length) }))));
+      tabsEl.replaceChildren(...labels.map(([id, l]) => h('button', { class: 'tab', role: 'tab', type: 'button', 'aria-selected': String(tab === id), onclick: () => { tab = id; remember('tab', id); paintSum(); paint(); } }, l, h('span', { class: 'n', text: String(sets[id].length) }))));
       let list = sets[tab].filter((b) => !q || (b.guest + ' ' + b.room + ' ' + b.ref).toLowerCase().includes(q));
       const key = sortEl.value;
       const rank = (b) => (b.stage >= 4 ? 3 : b.in === today ? 0 : b.stage >= 2 ? 1 : 2);   // today's arrivals, then in house, then coming up, then done
       list = [...list].sort((a, b) => key === 'name' ? a.guest.localeCompare(b.guest) : key === 'total' ? b.total - a.total : key === 'in' ? a.in.localeCompare(b.in) || a.guest.localeCompare(b.guest) : rank(a) - rank(b) || a.in.localeCompare(b.in));
-      meta.textContent = `${list.length} stay${list.length === 1 ? '' : 's'}, ${FD.naira(list.reduce((s, b) => s + b.total, 0))}`;
-      body.replaceChildren(...(list.length ? list.map((b) => h('div', Object.assign({ class: 'tr cols-b', role: 'row' }, LIVE ? { 'data-bid': b.id, tabindex: '0', title: 'Open ' + b.guest + ' to manage this stay' } : {}),
-        h('div', { class: 'id' }, disc(b.guest, b.hue), h('div', {}, h('b', { text: b.guest }), h('small', { text: b.ref + (b.linked === false ? ', not on Telegram yet' : '') }))),
+      meta.innerHTML = '';
+      meta.append(h('b', { text: String(list.length) }), ` stay${list.length === 1 ? '' : 's'}, `, h('b', { text: FD.naira(list.reduce((s, b) => s + b.total, 0)) }));
+      sel = ST.keepSelection(list.map((b) => b.id), sel);
+      body.replaceChildren(...(list.length ? list.map((b) => h('button', { class: 'tr cols-b' + (b.id === sel ? ' on' : ''), type: 'button', 'data-sid': b.id, 'aria-pressed': String(b.id === sel), onclick: () => select(b.id, { reveal: true }) },
+        h('div', { class: 'id' }, disc(b.guest, b.hue), h('div', {}, h('b', { text: b.guest }), h('small', { text: b.ref + ' · ' + b.src + (b.linked === false ? ' · no code' : '') }))),
         h('div', {}, `${b.type}`, h('small', { class: 'sub', style: 'display:block;color:var(--muted);font-size:13px', text: 'Room ' + b.room })),
         h('div', {}, `${FD.fmtDay(b.in)} to ${FD.fmtDay(b.out)}`, h('small', { style: 'display:block;color:var(--muted);font-size:13px', text: `${b.nights} night${b.nights > 1 ? 's' : ''}` })),
-        h('div', { class: 'jr', title: b.note }, h('span', { class: 'bars', 'aria-hidden': 'true' }, FD.STAGES.map((s, i) => h('i', { class: i < b.stage ? 'done' : i === b.stage ? 'cur' : '' }))), h('span', { text: FD.STAGE_WORD[b.stage] })),
-        h('div', { text: b.src }),
-        h('div', { class: 'num' }, FD.naira(b.total), LIVE && payInfo(b)[1] ? h('small', { class: 'paid ' + payInfo(b)[0], text: payInfo(b)[1] }) : null))) : [h('p', { class: 'foot-note', text: 'No stays match.' })]));
+        h('div', { class: 'jr', title: b.note }, h('span', { class: 'pill ' + PILL[b.stage], text: FD.STAGE_WORD[b.stage] }), h('span', { class: 'bars', 'aria-hidden': 'true' }, FD.STAGES.map((s, i) => h('i', { class: i < b.stage ? 'done' : i === b.stage ? 'cur' : '' })))),
+        h('div', { class: 'num' }, FD.naira(b.total), LIVE && payInfo(b)[1] ? h('small', { class: 'paid ' + payInfo(b)[0], text: payInfo(b)[1] }) : null))) : [h('p', { class: 'foot-note', text: 'No stays match. Try another tab or clear the search.' })]));
+      paintDetail(list.find((b) => b.id === sel));
     };
+    body.addEventListener('keydown', (e) => {                      // arrow keys move through the list
+      const d = { ArrowDown: 1, ArrowUp: -1 }[e.key];
+      if (!d || !e.target.matches('.tr')) return;
+      e.preventDefault();
+      const next = ST.neighbour([...body.querySelectorAll('.tr')].map((r) => r.dataset.sid), e.target.dataset.sid, d);
+      if (next) select(next, { focus: true });
+    });
     qEl.addEventListener('input', () => { q = qEl.value.trim().toLowerCase(); paint(); });
     if (gq) gq.addEventListener('input', () => { q = gq.value.trim().toLowerCase(); qEl.value = gq.value; paint(); });
     sortEl.addEventListener('change', paint);

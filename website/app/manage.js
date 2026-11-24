@@ -233,9 +233,21 @@
   $('#blocksSec').hidden = !A.can('manager');                           // blocking rooms is a manager's call
   $('#bnew').addEventListener('click', openNew);
   $('#bblock').addEventListener('click', openBlock);
-  const rows = $('#bbody');
-  rows.addEventListener('click', (e) => { const row = e.target.closest('[data-bid]'); if (row) openStay(row.dataset.bid); });
-  rows.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-bid]')) { e.preventDefault(); openStay(e.target.dataset.bid); } });
+  // the stay panel (drawn by app.js) has three real buttons: check in, check out, and the full stay dialog (room, payments, cancel)
+  $('#bdetail').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-act]');
+    if (!btn || btn.disabled) return;
+    const b = FD.bookings.find((x) => x.id === btn.dataset.sid);
+    if (!b) return;
+    if (btn.dataset.act === 'manage') { openStay(b.id); return; }
+    const out = btn.dataset.act === 'checkout';
+    if (!out && btn.dataset.early && !confirm(`${b.guest} is booked from ${FD.fmtDay(b.in)}. Check them in now?`)) return;
+    const owed = Math.max(0, b.total - (b.paid || 0));
+    if (out && owed > 0 && !confirm(`${b.guest} still owes ${FD.naira(owed)}. Check them out anyway?`)) return;
+    busy(btn, true);
+    try { await A.manage.status(b.id, out ? 'checkout' : 'checkin'); say(`${b.guest} is checked ${out ? 'out' : 'in'}.`); await A.refresh(); }
+    catch (err) { say(err.message || 'That did not work.'); busy(btn, false); }
+  });
   window.addEventListener('alejo:data', renderBlocks);
   renderBlocks();
 })();
