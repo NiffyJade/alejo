@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calendar · Alejo staff dashboard</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f3f5fa">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://api.fontshare.com">
+<link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body data-page="calendar">
+<a class="skip" href="#main">Skip to content</a>
+<div class="app">
+<aside class="side" id="side" aria-label="Dashboard">
+  <a class="brand" href="/app/index.html" aria-label="Alejo, today"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0z" fill="#111"/><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="#111"/><circle cx="12" cy="6.2" r="2" fill="#1a4be0"/></svg><span class="brand-t"><b translate="no">Alejo</b></span></a>
+  <div class="scope"><b>BrightSide Hotel</b><span>Lagos, Nigeria</span></div>
+  <nav class="nav" aria-label="Pages"><a href="/app/index.html">Today</a><a href="/app/inbox.html">Inbox <i class="cnt" id="needCount" role="img" aria-label="guests need you">3</i></a><a href="/app/enquiries.html">Enquiries</a><a href="/app/ratings.html">Ratings</a><a href="/app/bookings.html">Bookings</a><a href="/app/calendar.html" aria-current="page">Calendar</a><p class="nav-h">Your hotel</p><a href="/app/knowledge.html">Facts</a><a href="/app/settings.html">Settings</a><a href="/app/team.html">Team</a></nav>
+  <div class="side-foot">
+    <div class="links"><a class="web-link" href="/">Website</a><span id="authSlot"></span></div>
+    <div class="me"><span class="acct" id="acct" title="Amaka Okafor, front desk">AO</span><span><b id="meName">Amaka Okafor</b><small id="meRole">Front desk, nights</small></span></div>
+  </div>
+</aside>
+<div class="scrim" id="scrim"></div>
+<div class="frame-main">
+  <header class="top">
+    <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="side">Menu</button>
+    <span class="top-name" translate="no">Alejo</span>
+    <div class="search"><label class="sr" for="q">Search</label><input id="q" name="q" type="search" placeholder="Search stays…" autocomplete="off" spellcheck="false"><kbd aria-hidden="true">/</kbd></div>
+    <span class="demo-note" id="demoNote">Sample data, Tue 27 Oct, 02:31</span>
+  </header>
+<main class="sheet" id="main">
+  <div class="title-row">
+    <div><h1>Calendar</h1><p class="sub">Pick any date to see how many rooms are free, and who is staying, arriving or leaving.</p></div>
+  </div>
+
+  <section class="calcheck" aria-labelledby="h-check">
+    <h2 id="h-check">Is there a room for these nights?</h2>
+    <form class="calcheck-f" id="ccheck" autocomplete="off">
+      <label class="mfield"><span>Check-in</span><input class="minput" type="date" id="cin" required></label>
+      <label class="mfield"><span>Check-out</span><input class="minput" type="date" id="cout" required></label>
+    </form>
+    <div class="calcheck-r" id="cresult" role="status" aria-live="polite"></div>
+  </section>
+
+  <div class="calbar">
+    <div class="calnav">
+      <button class="btn line small" type="button" id="cprev" aria-label="Previous month">&lsaquo;</button>
+      <h2 class="calmonth" id="cmonth" aria-live="polite"></h2>
+      <button class="btn line small" type="button" id="cnext" aria-label="Next month">&rsaquo;</button>
+      <button class="btn line small" type="button" id="ctoday">Today</button>
+    </div>
+    <div class="calpick">
+      <label class="mfield"><span>Go to date</span><input class="minput" type="date" id="cgo"></label>
+      <label class="mfield"><span>Rooms</span><select class="minput" id="ctype"></select></label>
+    </div>
+  </div>
+
+  <ul class="callegend" aria-label="Colours">
+    <li><i class="sw open"></i>Rooms free</li><li><i class="sw few"></i>Few left</li><li><i class="sw full"></i>Full</li><li><i class="sw closed"></i>Closed (blocked)</li><li><i class="sw past"></i>Past</li>
+  </ul>
+  <div class="calgrid" id="cgrid" role="group" aria-label="Month"></div>
+  <p class="sr" id="cstatus" role="status" aria-live="polite"></p>
+
+  <section class="calday" id="cday" aria-live="polite" tabindex="-1"></section>
+  <p class="foot-note">A stay holds a room for every night from check-in up to, but not including, the check-out day, so a room whose guest leaves that morning is free for the next guest. Rooms taken out of sale (Blocks, on the Bookings page) show as closed. Past days show who stayed. Bookings made by the Telegram bot, the phone line and the desk all appear here.</p>
+</main>
+</div>
+</div>
+
+<script src="/app/data.js"></script>
+<script src="/app/live.js"></script>
+<script src="/app/calendar-core.js"></script>
+<script src="/app/app.js"></script>
+<script src="/app/calendar.js"></script>
+</body>
+</html>

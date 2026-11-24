@@ -564,3 +564,61 @@ a.pill { text-decoration: none; }
   .team-roles { grid-template-columns: 1fr; gap: 2px; }
   .team-roles dd { margin-bottom: 10px; }
 }
+
+/* ---------- Calendar ---------- */
+.calcheck { margin: 4px 0 20px; padding: 16px; border: 1px solid var(--edge); border-radius: var(--r-card); background: var(--raised); }
+.calcheck h2 { font-size: 16px; font-weight: 600; line-height: 22px; margin-bottom: 10px; }
+.calcheck-f { display: flex; gap: 12px; flex-wrap: wrap; }
+.calcheck-f .mfield { flex: 0 1 190px; }
+.calcheck-r { margin-top: 8px; max-width: 640px; }
+.calcheck-r .brow:first-of-type { border-top: 0; }
+.calbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
+.calnav { display: flex; align-items: center; gap: 8px; }
+.calmonth { font-size: 20px; font-weight: 600; line-height: 28px; min-width: 9.5em; text-align: center; }
+.calpick { display: flex; gap: 12px; flex-wrap: nowrap; }
+.calpick .mfield { flex: 0 0 170px; }
+@media (max-width: 600px) { .calpick { width: 100%; } .calpick .mfield { flex: 1 1 0; min-width: 0; } }
+.callegend { display: flex; flex-wrap: wrap; gap: 6px 16px; list-style: none; margin: 0 0 10px; padding: 0; color: var(--muted); font-size: 13px; }
+.callegend li { display: flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--control); display: inline-block; }
+.sw.open, .calcell.open { background: var(--positive-soft); }
+.sw.few, .calcell.few { background: var(--warning-soft); }
+.sw.full, .calcell.full { background: var(--negative-soft); }
+.sw.closed, .calcell.closed { background: repeating-linear-gradient(135deg, #e6eaf2, #e6eaf2 5px, #f3f5fa 5px, #f3f5fa 10px); }
+.sw.past, .calcell.past, .calcell.none { background: var(--raised); }
+.calgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cw { padding: 4px 6px; color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.calcell { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-height: 76px; padding: 6px 7px 9px; border: 1px solid var(--edge); border-radius: var(--r-ctl); font: inherit; text-align: left; color: var(--text); cursor: pointer; overflow: hidden; }
+.calcell .cd { font-weight: 600; font-size: 14px; line-height: 20px; }
+.calcell .cv { font-size: 13px; line-height: 17px; font-weight: 500; }
+.calcell.open .cv { color: var(--positive); }
+.calcell.few .cv { color: var(--warning); font-weight: 600; }
+.calcell.full .cv, .calcell.closed .cv { color: var(--negative); font-weight: 600; }
+.calcell.past, .calcell.past .cv { color: var(--muted); }
+.calcell .cm { font-size: 12px; line-height: 16px; color: var(--muted); }
+.calcell .cb { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0, 0, 0, 0.06); }
+.calcell .cb b { display: block; height: 100%; background: var(--ai); opacity: 0.55; }
+.calcell.out { opacity: 0.55; }
+.calcell.now .cd { color: var(--ai); }
+.calcell.now { border-color: var(--ai); }
+.calcell.sel { outline: 2px solid var(--text); outline-offset: 1px; }
+@media (hover: hover) and (pointer: fine) { .calcell:hover { border-color: var(--control); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06); } }
+.calcell:focus-visible { outline: 2px solid var(--ai); outline-offset: 2px; }
+.calday { margin: 24px 0 8px; padding-top: 16px; border-top: 1px solid var(--edge); }
+.calday-h { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.calday-h h2 { font-size: 18px; font-weight: 600; line-height: 26px; }
+.calday .sub { margin: 4px 0 12px; }
+.calbytype { display: flex; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 8px; }
+.calbytype div { display: flex; flex-direction: column; min-width: 140px; padding: 8px 12px; border: 1px solid var(--edge); border-radius: var(--r-ctl); background: var(--raised); }
+.calbytype span { font-size: 14px; } .calbytype small { color: var(--muted); font-size: 12px; }
+.calgrp { margin-top: 16px; max-width: 760px; }
+.calgrp h3 { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.calgrp h3 .n { margin-left: 8px; color: var(--faint); font-weight: 500; }
+@media (max-width: 600px) {
+  .calgrid { gap: 3px; }
+  .calcell { min-height: 58px; padding: 5px 4px 8px; }
+  .calcell .cm { display: none; }
+  .calcell .cv { font-size: 11px; }
+  .calmonth { min-width: 0; flex: 1; font-size: 18px; }
+  .calnav { width: 100%; }
+}
