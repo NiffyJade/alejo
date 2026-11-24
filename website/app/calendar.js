@@ -34,6 +34,7 @@
     today: FD.NOW.date,
     bookings: FD.bookings || [],
     blocks: FD.blocks || [],
+    svcBookings: FD.svcBookings || [],
     roomTypes: FD.roomTypes || Object.keys(FD.RATES || {}).map((name) => ({ name, rate: FD.RATES[name], total: DEMO_TOTALS[name] || 4 })),
   });
 
@@ -53,7 +54,8 @@
     open: (s) => `${plural(s.free, 'room', 'rooms')} free`, few: (s) => `only ${plural(s.free, 'room', 'rooms')} left`, full: () => 'full', closed: () => 'closed, rooms blocked',
     past: (s) => `${plural(s.booked, 'room', 'rooms')} were in use`, none: () => 'no rooms set up',
   };
-  const moves = (s) => [s.arriving.length ? `${s.arriving.length} in` : '', s.leaving.length ? `${s.leaving.length} out` : '', s.blocked && s.state !== 'closed' ? `${s.blocked} blocked` : ''].filter(Boolean).join(' · ');
+  const hall = (s) => [...new Set(s.svc.filter((b) => b.exclusive).map((b) => b.service))].join(', ');               // an exclusive service (the event hall) booked that day
+  const moves = (s) => [s.arriving.length ? `${s.arriving.length} in` : '', s.leaving.length ? `${s.leaving.length} out` : '', s.blocked && s.state !== 'closed' ? `${s.blocked} blocked` : '', hall(s)].filter(Boolean).join(' · ');
   const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   const renderGrid = () => {
@@ -66,7 +68,7 @@
       return h('button', {
         type: 'button', class: `calcell ${s.state}${inMonth ? '' : ' out'}${d === c.today ? ' now' : ''}${d === sel ? ' sel' : ''}`, 'data-d': d,
         'aria-pressed': String(d === sel), 'aria-current': d === c.today ? 'date' : false, tabindex: d === sel ? '0' : '-1',
-        'aria-label': `${longDay(d)}: ${SPOKEN[s.state](s)}${s.arriving.length ? ', ' + s.arriving.length + ' arriving' : ''}${s.leaving.length ? ', ' + s.leaving.length + ' leaving' : ''}`,
+        'aria-label': `${longDay(d)}: ${SPOKEN[s.state](s)}${s.arriving.length ? ', ' + s.arriving.length + ' arriving' : ''}${s.leaving.length ? ', ' + s.leaving.length + ' leaving' : ''}${hall(s) ? ', ' + hall(s) + ' booked' : ''}`,
       },
       h('span', { class: 'cd' }, day === 1 ? new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : String(day)),
       h('span', { class: 'cv', text: LABEL[s.state](s) }),
@@ -91,15 +93,18 @@
     const s = C.dayStats(sel, ctx(), type), past = s.past;
     const pill = { open: ['pos', `${plural(s.free, 'room', 'rooms')} free`], few: ['warn', `Only ${plural(s.free, 'room', 'rooms')} left`], full: ['neg', 'Full'], closed: ['neg', 'Closed'], past: ['', 'Past'], none: ['', 'No rooms set up'] }[s.state];
     const staying = s.stays.filter((b) => b.in < sel), arriving = s.arriving;
-    dayEl.replaceChildren(
+    dayEl.replaceChildren(...[
       h('div', { class: 'calday-h' }, h('h2', { text: longDay(sel) }), h('span', { class: 'pill ' + pill[0], text: pill[1] })),
       h('p', { class: 'sub', text: `${type || 'All rooms'}: ${plural(s.total, 'room', 'rooms')}, ${s.booked} ${past ? 'were in use' : 'in use'}${s.blocked ? ', ' + s.blocked + ' blocked' : ''}${past ? '' : ', ' + s.free + ' free'}.` }),
       s.byType.length > 1 ? h('div', { class: 'calbytype' }, s.byType.map((t) => h('div', {}, h('b', { text: t.name }), h('span', { text: past ? `${t.booked} of ${t.total} in use` : `${t.free} of ${t.total} free` }), h('small', { text: t.rate ? naira(t.rate) + ' a night' : '' })))) : null,
       group(past ? 'Arrived' : 'Arriving', arriving, past ? 'Nobody arrived.' : 'Nobody is arriving.'),
       group(past ? 'Stayed over' : 'Staying', staying, 'Nobody is staying over from the night before.'),
       group(past ? 'Left' : 'Leaving', s.leaving, past ? 'Nobody left.' : 'Nobody is leaving.'),
+      s.svc.length ? h('div', { class: 'calgrp' }, h('h3', {}, 'Event hall, gym and other bookings', h('span', { class: 'n', text: String(s.svc.length) })),
+        ...s.svc.map((b) => h('div', { class: 'brow' }, h('div', {}, h('b', { text: b.name }), h('small', { text: `${b.service}${b.startTime ? ', ' + b.startTime + (b.endTime ? ' to ' + b.endTime : '') : ''}. ${b.start === b.end ? FD.fmtDay(b.start) : FD.fmtDay(b.start) + ' to ' + FD.fmtDay(b.end)}. Ref ${b.ref}` })),
+          h('span', { class: 'pill ' + (b.amount > 0 && b.paid >= b.amount ? 'pos' : b.paid > 0 ? 'warn' : ''), text: b.amount > 0 && b.paid >= b.amount ? 'Paid in full' : b.paid > 0 ? 'Part paid' : 'Not paid' })))) : null,
       s.blocks.length ? h('div', { class: 'calgrp' }, h('h3', {}, 'Rooms out of sale', h('span', { class: 'n', text: String(s.blocks.reduce((n, k) => n + k.rooms, 0)) })),
-        ...s.blocks.map((k) => h('div', { class: 'brow' }, h('div', {}, h('b', { text: `${k.type}: ${plural(k.rooms, 'room', 'rooms')}` }), h('small', { text: `${FD.fmtDay(k.start)} to ${FD.fmtDay(k.end)}${k.reason ? ', ' + k.reason : ''}` }))))) : null);
+        ...s.blocks.map((k) => h('div', { class: 'brow' }, h('div', {}, h('b', { text: `${k.type}: ${plural(k.rooms, 'room', 'rooms')}` }), h('small', { text: `${FD.fmtDay(k.start)} to ${FD.fmtDay(k.end)}${k.reason ? ', ' + k.reason : ''}` }))))) : null].filter(Boolean));       // an absent part must not print as "null"
   };
 
   const choose = (d, opts) => {

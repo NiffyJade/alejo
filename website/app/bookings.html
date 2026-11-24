@@ -57,6 +57,14 @@
     </section>
     <aside class="bk-detail" id="bdetail" aria-label="Selected stay" tabindex="-1"></aside>
   </div>
+  <section class="svcs" id="svcSec" aria-labelledby="h-svc" hidden>
+    <div class="blocks-h"><div><h2 id="h-svc">Event hall, gym and other bookings</h2><p>Bookings for the hotel's services, apart from rooms. Choose New booking, then pick the service. Pick one here to record a payment or cancel it.</p></div>
+      <label class="sr" for="svcFilter">Show</label><select class="minput svc-filter" id="svcFilter"><option value="up">Upcoming</option><option value="past">Past</option><option value="all">All</option></select></div>
+    <div class="tbl" aria-label="Other bookings">
+      <div class="th cols-s" aria-hidden="true"><div>Customer</div><div>Service</div><div>When</div><div class="num">Amount</div></div>
+      <div id="svcBody"></div>
+    </div>
+  </section>
   <section class="blocks" id="blocksSec" aria-labelledby="h-blocks" hidden>
     <div class="blocks-h"><div><h2 id="h-blocks">Blocked rooms</h2><p>Rooms taken out of sale for repairs, a hold, or bookings made on other platforms. The Telegram bot, the phone line and the desk all see them.</p></div><button class="btn line" type="button" id="bblock">Block rooms</button></div>
     <div id="blist"></div>
@@ -71,6 +79,7 @@
 <script src="/app/data.js"></script>
 <script src="/app/live.js"></script>
 <script src="/app/stay-core.js"></script>
+<script src="/app/service-core.js"></script>
 <script src="/app/app.js"></script>
 <script src="/app/manage.js"></script>
 </body>

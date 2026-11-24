@@ -46,6 +46,16 @@ eq('arrivals and departures of a day (26th: C arrives; A and nobody else leaves.
 eq('a booking for a room type the hotel no longer lists is ignored, not counted', C.dayStats('2026-11-25', { ...ctx, bookings: ctx.bookings.concat([{ id: 'z', type: 'Penthouse', in: '2026-11-25', out: '2026-11-26', stage: 0 }]) }, '').booked, 2);
 eq('no room types at all: state "none", no crash', C.dayStats('2026-11-25', { today: T, roomTypes: [], bookings: [], blocks: [] }, '').state, 'none');
 
+// event hall, gym and other service bookings on a day
+const withSvc = { ...ctx, svcBookings: [
+  { id: 's1', service: 'Event hall', exclusive: true, name: 'Ada', start: '2026-12-05', end: '2026-12-06' },
+  { id: 's2', service: 'Pool', exclusive: false, name: 'Group', start: '2026-12-05', end: '2026-12-05' },
+] };
+eq('service bookings show on every day they cover (both end days included)', [C.dayStats('2026-12-05', withSvc, '').svc.length, C.dayStats('2026-12-06', withSvc, '').svc.length, C.dayStats('2026-12-07', withSvc, '').svc.length, C.dayStats('2026-12-04', withSvc, '').svc.length], [2, 1, 0, 0]);
+eq('choosing one room type hides the services (they are not rooms)', C.dayStats('2026-12-05', withSvc, 'Standard').svc.length, 0);
+eq('a calendar with no service bookings still works (hotels without services)', [C.dayStats('2026-12-05', ctx, '').svc, C.dayStats('2026-12-05', { ...ctx, svcBookings: undefined }, '').svc], [[], []]);
+eq('services never change the room counts', C.dayStats('2026-11-25', withSvc, '').free, C.dayStats('2026-11-25', ctx, '').free);
+
 // "is there a room for these nights": the tightest night decides
 const r = C.freeForRange('2026-11-24', '2026-11-27', ctx);
 eq('range 24 to 27: Standard is limited by its tightest night (the 25th, 1 free), Suite by the 26th (1 free)', r.map((x) => [x.name, x.free]), [['Standard', 1], ['Suite', 1]]);

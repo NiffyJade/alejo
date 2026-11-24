@@ -56,7 +56,8 @@
     throw new Error('This account is not on the staff list.');
   };
   const fetchRows = async () => {
-    const [guests, bookings, escalations, messages, rooms, kb, settings, payments, blocks] = await Promise.all([
+    const soft = (p) => p.catch(() => []);                          // the services tables arrive with sql/025: until then the dashboard simply shows none
+    const [guests, bookings, escalations, messages, rooms, kb, settings, payments, blocks, services, svcBookings, svcPays] = await Promise.all([
       rest(hq('guests?select=id,name,phone,telegram_chat_id&limit=1000')),
       rest(hq('bookings?select=*&order=check_in.desc&limit=1000')),
       rest(hq('escalations?select=*&order=created_at.desc&limit=500')),
@@ -66,8 +67,11 @@
       rest(hq('hotel_settings?select=key,value&limit=500')),
       rest(hq('booking_payments?select=id,booking_id,amount,method,note,created_at&order=created_at.asc&limit=5000')),
       rest(hq('room_blocks?select=*&order=start_date.asc&limit=500')),
+      soft(rest(hq('hotel_services?select=id,name,price,unit,exclusive,active,sort,notes&order=sort.asc,name.asc&limit=200'))),
+      soft(rest(hq('service_bookings?select=*&status=eq.booked&order=starts_on.desc&limit=1000'))),
+      soft(rest(hq('service_payments?select=id,booking_id,amount,method,note,recorded_by,created_at&order=created_at.asc&limit=5000'))),
     ]);
-    return { guests, bookings, escalations, messages, rooms, kb, settings, payments, blocks };
+    return { guests, bookings, escalations, messages, rooms, kb, settings, payments, blocks, services, svcBookings, svcPays };
   };
 
     /* ---------- the hotel's own time ---------- */
@@ -159,6 +163,15 @@
     Object.assign(FD, { NOW: nowInfo(), RATES, bookings, byGuest, conversations, staff: [],
       roomTypes: rows.rooms.filter((r) => r.active !== false).map((r) => ({ name: r.name, rate: Number(r.nightly_rate) || 0, total: r.total_rooms })),
       blocks: (rows.blocks || []).map((k) => ({ id: k.id, type: k.room_type, rooms: k.rooms, start: k.start_date, end: k.end_date, reason: k.reason || '' })) });
+    // services (event hall, gym, pool ...) and the bookings made for them
+    const svcAll = rows.services || [], svcById = Object.fromEntries(svcAll.map((x) => [x.id, x]));
+    FD.servicesAll = svcAll.map((x) => ({ id: x.id, name: x.name, price: Number(x.price) || 0, unit: x.unit, exclusive: !!x.exclusive, active: x.active !== false, notes: x.notes || '', sort: x.sort || 0 }));
+    FD.services = svcAll.filter((x) => x.active !== false).map((x) => ({ id: x.id, name: x.name, price: Number(x.price) || 0, unit: x.unit, exclusive: !!x.exclusive }));
+    const svcPaid = {};
+    (rows.svcPays || []).forEach((p) => { (svcPaid[p.booking_id] = svcPaid[p.booking_id] || []).push({ id: p.id, amount: Number(p.amount), method: p.method || '', note: p.note || '', at: p.created_at, by: p.recorded_by || '' }); });
+    FD.svcBookings = (rows.svcBookings || []).map((b) => { const sv = svcById[b.service_id] || {}; return { payments: svcPaid[b.id] || [], id: b.id, ref: b.id.slice(0, 8).toUpperCase(), serviceId: b.service_id, service: sv.name || 'Service', unit: sv.unit || '', exclusive: !!sv.exclusive,
+      name: b.customer_name, phone: b.phone || '', start: b.starts_on, end: b.ends_on, startTime: String(b.start_time || '').slice(0, 5), endTime: String(b.end_time || '').slice(0, 5),
+      qty: b.quantity, amount: Number(b.amount) || 0, paid: Number(b.paid) || 0, src: b.source || '', notes: b.notes || '', created: b.created_at }; });
     window.FD_KB = kb;
     window.FD_FACTS = settings;
   };
@@ -180,8 +193,13 @@
     not_in_house: () => 'This guest is not checked in.',
     closed: () => 'This booking is closed, so its room cannot change.',
     rooms: () => 'The number of rooms must be between 1 and the number the hotel has of that type.',
+    service: () => 'That service is not available.',
+    times: () => 'The end time must be after the start time.',
+    quantity: () => 'Enter how many (at least 1).',
+    taken: (r) => `${r.service} is already booked ${r.from === r.to ? 'on ' + dayWord(r.from) : 'from ' + dayWord(r.from) + ' to ' + dayWord(r.to)}. Choose another day.`,
     conflict: (r) => 'Only ' + r.free + ' ' + (r.room_type || '') + ' room' + (r.free === 1 ? ' is' : 's are') + ' free for those dates. Existing bookings already use the rest.',
   };
+  const dayWord = (d) => (window.FD && window.FD.fmtDay ? window.FD.fmtDay(d) : d);
   const call = async (fn, args) => {
     let r;
     try { r = await rest('rpc/' + fn, { method: 'POST', body: JSON.stringify(args) }); }
@@ -199,6 +217,18 @@
     pay: (id, amount, method, note) => call('staff_record_payment', { p_id: id, p_amount: amount, p_method: method || null, p_note: note || null }),
     block: (a) => call('staff_add_block', { p_hotel: HOTEL.id, p_room_type: a.type, p_rooms: a.rooms, p_start: a.start, p_end: a.end, p_reason: a.reason || null }),
     unblock: (id) => call('staff_remove_block', { p_id: id }),
+    serviceCreate: async (a) => {
+      try {
+        return await call('staff_create_service_booking', { p_hotel: HOTEL.id, p_service: a.service, p_name: a.name, p_phone: a.phone || null, p_start: a.start, p_end: a.end || a.start,
+          p_start_time: a.startTime || null, p_end_time: a.endTime || null, p_quantity: a.qty || 1, p_amount: a.amount == null || a.amount === '' ? null : a.amount, p_paid: a.paid || 0,
+          p_source: a.source || 'walk-in', p_notes: a.notes || null, p_payment_method: a.method || null });
+      } catch (e) {
+        if (e.reason === 'dates') e.message = 'Choose a date from today onward. The last day cannot be before the first, and a booking can last at most a year.';
+        throw e;
+      }
+    },
+    serviceCancel: (id, reason) => call('staff_cancel_service_booking', { p_id: id, p_reason: reason || null }),
+    servicePay: (id, amount, method, note) => call('staff_service_payment', { p_id: id, p_amount: amount, p_method: method || null, p_note: note || null }),
   };
 
   /* ---------- passwords: a one-time password must be replaced at first sign-in; anyone can change theirs later ---------- */
@@ -256,6 +286,23 @@
     take: (ids, name) => rest(hq('escalations?id=in.(' + ids.join(',') + ')&status=eq.open'), { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ assigned_to: name, assigned_at: name ? new Date().toISOString() : null }) }),   // name = null releases it
     clock: () => clock(new Date()),
     manage,
+    services: {                                                    // the Settings screen: only a manager's changes get through (row-level security says so)
+      save: async (a) => {
+        const body = { name: a.name, price: a.price, unit: a.unit, exclusive: !!a.exclusive, active: a.active !== false, notes: a.notes || null, sort: a.sort || 0 };
+        let r;
+        try {
+          r = a.id ? await rest(hq('hotel_services?id=eq.' + encodeURIComponent(a.id)), { method: 'PATCH', headers: { prefer: 'return=representation' }, body: JSON.stringify(body) })
+                   : await rest('hotel_services', { method: 'POST', headers: { prefer: 'return=representation' }, body: JSON.stringify(Object.assign({ hotel_id: HOTEL.id }, body)) });
+        } catch (e) { throw new Error(/duplicate key|unique/i.test(e.message) ? 'You already have a service with that name.' : /row-level security|permission/i.test(e.message) ? 'Only a manager can change services.' : e.message); }
+        if (!r || !r.length) throw new Error('Only a manager can change services.');
+      },
+      remove: async (id) => {
+        let r;
+        try { r = await rest(hq('hotel_services?id=eq.' + encodeURIComponent(id)), { method: 'DELETE', headers: { prefer: 'return=representation' } }); }
+        catch (e) { throw new Error(/foreign key|violates/i.test(e.message) ? 'This service has bookings, so it cannot be deleted. Switch it off instead.' : e.message); }
+        if (!r || !r.length) throw new Error('Only a manager can delete services.');
+      },
+    },
     team: async (action, a) => {                                    // the owner's Team screen (edge function staff-team; it checks the caller is this hotel's owner)
       const t = await token();
       const r = await fetch(SB + '/functions/v1/staff-team', { method: 'POST', headers: { apikey: ANON, authorization: 'Bearer ' + t, 'content-type': 'application/json' }, body: JSON.stringify(Object.assign({ action, hotel_id: HOTEL.id }, a || {})) });
@@ -327,6 +374,11 @@
         liveState = connected ? 'on' : 'off'; paintLive();
         if (connected) scheduleRefresh();                           // catch anything that happened while we were not listening
       });
+      try {                                                        // services: until sql/025 is applied this channel simply gets nothing, and the 15 s refresh covers it
+        const sc = client.channel('alejo-live-services');
+        ['hotel_services', 'service_bookings', 'service_payments'].forEach((table) => sc.on('postgres_changes', { event: '*', schema: 'public', table, filter: 'hotel_id=eq.' + HOTEL.id }, () => scheduleRefresh()));
+        sc.subscribe(() => { /* status is not shown: the main channel owns the live light */ });
+      } catch (e) { /* ignore */ }
       setInterval(async () => { try { client.realtime.setAuth(await token()); } catch (e) { /* signed out elsewhere */ } }, 4 * 60000);
     } catch (e) { liveState = 'off'; paintLive(); }
   };

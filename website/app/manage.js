@@ -99,6 +99,7 @@
         await A.refresh();
       });
     } },
+      kindPicker('room'),
       h('div', { class: 'mgrid' },
         field('Guest name', f.name), field('Phone number', f.phone, 'Used to find the guest again and to link Telegram later.'),
         field('Room type', f.type), field('Source', f.source),
@@ -110,6 +111,146 @@
     show('New booking', form);
     avail.update();
     f.name.focus();
+  };
+
+
+  /* ---------- other bookings: event hall, gym, pool ... (sql/025_services.sql; rules in service-core.js) ---------- */
+  const V = window.AlejoSvc;
+  const hasServices = () => !!(FD.services || []).length;
+  // "What is being booked?" sits at the top of every New booking form; it appears only when the hotel has services
+  const kindPicker = (current) => {
+    if (!hasServices()) return null;
+    const sel = select([['room', 'Room stay']].concat(FD.services.map((s) => ['svc:' + s.id, `${s.name} (${FD.naira(s.price)} ${V.unitOf(s.unit).per})`])), current);
+    sel.setAttribute('aria-label', 'What is being booked');
+    sel.addEventListener('change', () => openBooking(sel.value));
+    return field('What is being booked?', sel);
+  };
+  const openBooking = (kind) => (kind && kind.startsWith('svc:') ? openNewService(kind.slice(4)) : openNew());
+  const when = (b) => `${b.start === b.end ? FD.fmtDay(b.start) : FD.fmtDay(b.start) + ' to ' + FD.fmtDay(b.end)}${b.startTime ? ', ' + b.startTime + (b.endTime ? ' to ' + b.endTime : '') : ''}`;
+  const payChip = (b) => (b.amount <= 0 ? ['', ''] : b.paid >= b.amount ? ['pos', 'Paid in full'] : b.paid > 0 ? ['part', 'Paid ' + FD.naira(b.paid)] : ['neg', 'Unpaid']);
+
+  const openNewService = (svcId) => {
+    const svc = (FD.services || []).find((s) => s.id === svcId);
+    if (!svc) { openNew(); return; }
+    const t0 = today(), U = V.unitOf(svc.unit);
+    const f = {
+      name: input({ type: 'text', required: true, maxlength: 80, autocomplete: 'off' }),
+      phone: input({ type: 'tel', inputmode: 'tel', autocomplete: 'off', placeholder: '0803 000 0000' }),
+      start: input({ type: 'date', required: true, min: t0, value: t0 }),
+      end: input({ type: 'date', min: t0, value: t0 }),
+      st: input({ type: 'time' }), et: input({ type: 'time' }),
+      qty: input({ type: 'number', min: '1', step: '1', value: '1', inputmode: 'numeric' }),
+      amount: input({ type: 'number', min: '0', step: '100', inputmode: 'numeric' }),
+      paid: input({ type: 'number', min: '0', step: '100', placeholder: '0', inputmode: 'numeric' }),
+      method: select(METHODS),
+      source: select([['walk-in', 'Walk-in'], ['phone', 'Phone call'], ['online', 'Online or another platform'], ['other', 'Other']]),
+      notes: input({ type: 'text', maxlength: 300, autocomplete: 'off', placeholder: 'Optional, for example the type of event' }),
+    };
+    let touched = false;                                              // once staff type their own amount, the price stops overwriting it
+    f.amount.addEventListener('input', () => { touched = true; });
+    const asksQty = V.asksQuantity(svc.unit);
+    const qty = () => (asksQty ? Math.max(1, Math.floor(Number(f.qty.value) || 1)) : 1);
+    const endDay = () => V.endFor(svc.unit, f.start.value, qty(), f.end.value);
+    const hint = h('p', { class: 'mhint', 'aria-live': 'polite' });
+    const err = h('p', { class: 'merr', role: 'alert' });
+    const submit = h('button', { class: 'btn', type: 'submit', text: 'Create booking' });
+    const sync = () => {
+      if (V.asksEndDate(svc.unit)) { f.end.min = f.start.value || t0; if (f.end.value < f.start.value) f.end.value = f.start.value; }
+      if (!touched) f.amount.value = String(V.amountFor(svc.price, qty()));
+      const s = f.start.value, e = endDay();
+      let text = '', hit = null;
+      if (s && svc.exclusive) {
+        hit = V.clashFor(FD.svcBookings, svc.id, s, e);
+        text = hit ? `${svc.name} is already booked ${hit.start === hit.end ? 'on ' + FD.fmtDay(hit.start) : 'from ' + FD.fmtDay(hit.start) + ' to ' + FD.fmtDay(hit.end)} (${hit.name}). Choose another day.` : `${svc.name} is free on ${s === e ? FD.fmtDay(s) : FD.fmtDay(s) + ' to ' + FD.fmtDay(e)}.`;
+      } else if (s && V.quantityMakesEnd(svc.unit)) text = `Runs from ${FD.fmtDay(s)} to ${FD.fmtDay(e)}.`;
+      hint.textContent = text;
+      hint.classList.toggle('clash', !!hit);                       // a taken day is shown in red, and the button waits for another day (the database still has the last word)
+      submit.disabled = !!hit;
+    };
+    [f.start, f.end, f.qty].forEach((el) => el.addEventListener('input', sync));
+    const form = h('form', { class: 'msec', onsubmit: (e) => {
+      e.preventDefault();
+      run(submit, err, async () => {
+        const r = await A.manage.serviceCreate({ service: svc.id, name: f.name.value, phone: f.phone.value, start: f.start.value, end: endDay(), startTime: V.asksTimes(svc.unit) ? f.st.value : '', endTime: V.asksTimes(svc.unit) ? f.et.value : '',
+          qty: qty(), amount: f.amount.value === '' ? null : Number(f.amount.value), paid: Number(f.paid.value || 0), method: f.method.value, source: f.source.value, notes: f.notes.value });
+        dlg.close();
+        say(`Booked ${r.customer} for ${r.service}, reference ${r.ref}.`);
+        await A.refresh();
+      });
+    } },
+      kindPicker('svc:' + svc.id),
+      h('div', { class: 'mgrid' }, field('Customer name', f.name), field('Phone number', f.phone)),
+      h('div', { class: 'mgrid' },
+        field(V.asksEndDate(svc.unit) ? 'First day' : 'Date', f.start),
+        V.asksEndDate(svc.unit) ? field('Last day', f.end, 'The same as the first day for one day.') : (asksQty ? field(U.ask, f.qty) : h('span'))),
+      V.asksTimes(svc.unit) ? h('div', { class: 'mgrid' }, field('Starts at', f.st, 'Optional'), field('Ends at', f.et, 'Optional')) : null,
+      hint,
+      h('div', { class: 'mgrid' }, field(`Amount (₦), ${U.per} ${FD.naira(svc.price)}`, f.amount, 'Change it for a price you agreed with the customer.'), field('Paid so far (₦)', f.paid)),
+      h('div', { class: 'mgrid' }, field('Payment method', f.method), field('Source', f.source)),
+      field('Notes', f.notes),
+      h('div', { class: 'mact' }, submit, h('button', { class: 'btn line', type: 'button', onclick: () => dlg.close(), text: 'Cancel' })), err);
+    show('New booking', form);
+    sync();
+    f.name.focus();
+  };
+
+  // one service booking: details, payments, cancel
+  const openSvc = (id, note) => {
+    const b = (FD.svcBookings || []).find((x) => x.id === id);
+    if (!b) { if (dlg.open) dlg.close(); return; }
+    const err = h('p', { class: 'merr', role: 'alert' });
+    const after = async (msg) => { await A.refresh(); say(msg); openSvc(id, msg); };
+    const kv = h('dl', { class: 'mkv' }, [['Reference', b.ref], ['Service', b.service], ['Customer', b.name], b.phone ? ['Phone', b.phone] : null, ['When', when(b)], ['How many', V.countWord(b.unit, b.qty)],
+      ['Amount', FD.naira(b.amount)], ['Paid', FD.naira(b.paid)], ['Still to pay', V.owed(b) > 0 ? FD.naira(V.owed(b)) : 'Nothing'], ['Booked via', b.src || 'not recorded'], b.notes ? ['Notes', b.notes] : null]
+      .filter(Boolean).flatMap(([k, v]) => [h('dt', { text: k }), h('dd', { text: v })]));
+    const amount = input({ type: 'number', step: '100', inputmode: 'numeric', 'aria-label': 'Amount in naira', placeholder: 'Amount (₦)' });
+    const pmethod = select(METHODS); pmethod.setAttribute('aria-label', 'Payment method');
+    const pnote = input({ type: 'text', maxlength: 200, 'aria-label': 'Payment note', placeholder: 'Note (optional)' });
+    const payTz = (window.Alejo && window.Alejo.hotel && window.Alejo.hotel() && window.Alejo.hotel().timezone) || 'Africa/Lagos';
+    const payList = (b.payments || []).map((p) => h('div', { class: 'mpay' },
+      h('span', {}, `${p.amount < 0 ? 'Refund ' : ''}${FD.naira(Math.abs(p.amount))}`, h('small', { text: [p.method, p.note].filter(Boolean).map((x) => ' ' + x).join(' ·') })),
+      h('small', { text: new Date(p.at).toLocaleString('en-GB', { timeZone: payTz, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) })));
+    const addPay = h('button', { class: 'btn line', type: 'button', text: 'Record payment' });
+    addPay.addEventListener('click', () => run(addPay, err, async () => {
+      const v = Number(amount.value);
+      if (!v) throw new Error('Enter the amount received. Use a minus sign for a refund.');
+      await A.manage.servicePay(b.id, v, pmethod.value, pnote.value);
+      await after(v > 0 ? `Recorded ${FD.naira(v)}.` : `Recorded a refund of ${FD.naira(-v)}.`);
+    }));
+    let cancelBox = null, showCancel = null;
+    if (A.can('manager')) {                                          // cancelling is a manager's call (the database enforces it too)
+      const reason = input({ type: 'text', maxlength: 200, 'aria-label': 'Reason for cancelling', placeholder: 'Reason (optional)' });
+      const confirmBtn = h('button', { class: 'btn danger', type: 'button', text: 'Yes, cancel this booking' });
+      confirmBtn.addEventListener('click', () => run(confirmBtn, err, async () => { await A.manage.serviceCancel(b.id, reason.value); await A.refresh(); say(`Booking ${b.ref} cancelled.`); if (dlg.open) dlg.close(); }));
+      cancelBox = h('div', { class: 'msec', hidden: true }, h('p', { class: 'mhint', text: 'This frees the date. Any money paid is not refunded automatically: record the refund first if you are giving it back.' }), reason, h('div', { class: 'mact' }, confirmBtn));
+      showCancel = h('button', { class: 'btn line', type: 'button', text: 'Cancel booking', 'aria-expanded': 'false' });
+      showCancel.addEventListener('click', () => { cancelBox.hidden = !cancelBox.hidden; showCancel.setAttribute('aria-expanded', String(!cancelBox.hidden)); if (!cancelBox.hidden) reason.focus(); });
+    }
+    show(`${b.service}: ${b.name}`, note ? h('p', { class: 'mhint', role: 'status', text: note }) : null, kv,
+      h('div', { class: 'msec' }, h('h3', { text: 'Payments' }), ...(payList.length ? payList : [h('p', { class: 'mhint', text: 'No payments recorded yet.' })]),
+        h('div', { class: 'mgrid' }, amount, pmethod), pnote, h('div', { class: 'mact' }, addPay), h('p', { class: 'mhint', text: 'Use a minus sign for a refund.' })),
+      showCancel ? h('div', { class: 'mact' }, showCancel) : null, cancelBox, err);
+  };
+
+  // the list under the stays: every booking of the hotel's other services
+  const svcSec = $('#svcSec');
+  const renderServices = () => {
+    if (!svcSec) return;
+    const any = hasServices() || (FD.svcBookings || []).length > 0;
+    svcSec.hidden = !any;
+    if (!any) return;
+    const t = today(), mode = $('#svcFilter').value;
+    let list = (FD.svcBookings || []).filter((b) => (mode === 'past' ? b.end < t : mode === 'all' ? true : b.end >= t));
+    list = list.sort((a, b) => (mode === 'past' ? b.start.localeCompare(a.start) : a.start.localeCompare(b.start)));
+    const ini = (n) => String(n || '?').split(/\s+/).filter(Boolean).map((p) => p[0].toUpperCase()).slice(0, 2).join('');
+    $('#svcBody').replaceChildren(...(list.length ? list.map((b) => {
+      const pc = payChip(b);
+      return h('button', { class: 'tr cols-s', type: 'button', 'data-svc': b.id, onclick: () => openSvc(b.id) },
+        h('div', { class: 'id' }, h('span', { class: 'disc', 'aria-hidden': 'true', style: `--h:${(b.name.length * 47) % 360}`, text: ini(b.name) }), h('div', {}, h('b', { text: b.name }), h('small', { text: b.ref + (b.phone ? ' · ' + b.phone : '') }))),
+        h('div', {}, b.service, h('small', { class: 'sub', style: 'display:block;color:var(--muted);font-size:13px', text: V.countWord(b.unit, b.qty) })),
+        h('div', {}, when(b)),
+        h('div', { class: 'num' }, FD.naira(b.amount), pc[1] ? h('small', { class: 'paid ' + pc[0], text: pc[1] }) : null));
+    }) : [h('p', { class: 'foot-note', text: mode === 'past' ? 'No past bookings.' : 'Nothing booked yet. Use New booking and choose a service.' })]));
   };
 
   /* ---------- one stay ---------- */
@@ -231,7 +372,7 @@
   /* ---------- wiring ---------- */
   $('#bnew').hidden = false;
   $('#blocksSec').hidden = !A.can('manager');                           // blocking rooms is a manager's call
-  $('#bnew').addEventListener('click', openNew);
+  $('#bnew').addEventListener('click', () => openNew());
   $('#bblock').addEventListener('click', openBlock);
   // the stay panel (drawn by app.js) has three real buttons: check in, check out, and the full stay dialog (room, payments, cancel)
   $('#bdetail').addEventListener('click', async (e) => {
@@ -248,6 +389,8 @@
     try { await A.manage.status(b.id, out ? 'checkout' : 'checkin'); say(`${b.guest} is checked ${out ? 'out' : 'in'}.`); await A.refresh(); }
     catch (err) { say(err.message || 'That did not work.'); busy(btn, false); }
   });
-  window.addEventListener('alejo:data', renderBlocks);
+  if ($('#svcFilter')) $('#svcFilter').addEventListener('change', renderServices);
+  window.addEventListener('alejo:data', () => { renderBlocks(); renderServices(); });
   renderBlocks();
+  renderServices();
 })();

@@ -24,7 +24,7 @@
   const stageOf = (b) => (b.stage == null ? (b.status === 'checked_out' ? 4 : b.status === 'checked_in' ? 2 : 0) : b.stage);
   const occupies = (b, d, today) => b.in <= d && d < b.out && (stageOf(b) < 4 || d < today);
 
-  // ctx = { bookings, roomTypes: [{name, rate, total}], blocks: [{type, rooms, start, end, reason}], today }
+  // ctx = { bookings, roomTypes: [{name, rate, total}], blocks: [{type, rooms, start, end, reason}], svcBookings: [{service, name, start, end, ...}], today }
   const typesOf = (ctx, type) => (ctx.roomTypes || []).filter((t) => !type || t.name === type);
 
   const FEW = 0.2;                                                                    // 20% of the rooms or fewer left counts as "few left"
@@ -34,6 +34,7 @@
     const stays = (ctx.bookings || []).filter((b) => names.has(b.type) && occupies(b, d, ctx.today));
     const blocks = (ctx.blocks || []).filter((k) => names.has(k.type) && k.start <= d && d < k.end);
     const blocked = blocks.reduce((n, k) => n + k.rooms, 0);
+    const svc = type ? [] : (ctx.svcBookings || []).filter((b) => b.start <= d && d <= b.end);       // event hall, gym ... booked that day (not shown when one room type is chosen)
     const booked = stays.length;
     const free = Math.max(0, total - booked - blocked);
     const arriving = (ctx.bookings || []).filter((b) => names.has(b.type) && b.in === d);
@@ -49,7 +50,7 @@
       const bk = stays.filter((b) => b.type === t.name).length, bl = blocks.filter((k) => k.type === t.name).reduce((n, k) => n + k.rooms, 0);
       return { name: t.name, rate: t.rate, total: Number(t.total) || 0, booked: bk, blocked: bl, free: Math.max(0, (Number(t.total) || 0) - bk - bl) };
     });
-    return { date: d, total, booked, blocked, free, state, past, stays, arriving, leaving, blocks, byType };
+    return { date: d, total, booked, blocked, free, state, past, stays, arriving, leaving, blocks, byType, svc };
   };
 
   // the one rule behind "is there a room for these nights?": the fewest free rooms on any night of the stay (as the database does)
