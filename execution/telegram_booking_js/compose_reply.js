@@ -64,10 +64,39 @@ if (p.booking_flow) {
   }
 }
 
+// ---- other services (event hall, gym, pool ...). Everything said here comes from code and live data, never from the model.
+// A guest who wants one gets a staff REQUEST (the team confirms any deposit and books it in the dashboard); the bot never books a service.
+let staffQuestion = '', svcKind = false;
+if (p.intent === 'service' && p.svc_plan) {
+  const sp = p.svc_plan, svc = sp.svc, names = (p.services || []).map(x => x.name).join(', ');
+  escalate = false; ai = true;
+  const range = sp.date ? (sp.end ? `${fmt(sp.date)} to ${fmt(sp.end)}` : fmt(sp.date)) : '';
+  if (!svc) {
+    reply = sp.unknown ? T('svc_unknown', sp.unknown, names) : T('svc_which', names);
+  } else if (sp.problem === 'past') {
+    reply = T('svc_past', sp.problem_arg);
+  } else if (!sp.date) {
+    reply = T('svc_ask_date', svc.name);
+  } else if (sp.clash) {
+    reply = T('svc_taken', svc.name, range, sp.clash);
+  } else {
+    const perWord = SVC_PER[svc.unit] || '', byCount = svc.unit !== 'per_event' && sp.qty > 0, total = byCount ? svc.price * sp.qty : 0;
+    const cost = T('svc_cost', svc.price, perWord, total, svcQty(svc.unit, sp.qty));
+    const free = svc.exclusive ? T('svc_free', svc.name, range) + ' ' : '';
+    if (p.wants_to_book) {
+      reply = free + T('svc_pass', svc.name, cost, svc.exclusive ? '' : range);
+      escalate = true; svcKind = true;
+      staffQuestion = `${svc.name} booking request: ${range}${byCount ? ', ' + svcQty(svc.unit, sp.qty) : ''}. ${svc.price > 0 ? NGN(svc.price) + ' naira ' + perWord + (total ? ', ' + NGN(total) + ' naira in total' : '') : 'No fixed price'}. Guest wrote: "${p.question}"`;
+    } else {
+      reply = (free || T('svc_free', svc.name, range) + ' ') + cost + T('svc_offer');
+    }
+  }
+}
+
 if (p.booking_flow && p.info_answer && !p.draft_cleared) reply = p.info_answer + '\n\n' + reply;   // answer to a side question asked in the same message
 
 // Service recovery: what staff are being asked to handle, tracked in `escalations` until it is settled.
-const kind = escalate ? (p.kind || 'question') : 'question', category = escalate ? (p.category || null) : null;
+const kind = escalate ? (svcKind ? 'request' : (p.kind || 'question')) : 'question', category = escalate ? (svcKind ? 'booking' : (p.category || null)) : null;
 const TITLE = { emergency: '🚨 EMERGENCY', complaint: '⚠️ Guest complaint', request: '🛎 Guest request' };
 const alert_title = (TITLE[kind] || '🛎 Guest needs help') + (['request', 'complaint'].includes(kind) && category ? ` (${category})` : '');
 const row = { chat_id: p.chat_id, check_in: d.check_in, check_out: d.check_out, room_type: d.room_type,
@@ -75,6 +104,6 @@ const row = { chat_id: p.chat_id, check_in: d.check_in, check_out: d.check_out, 
   ...(p.from_name ? { tg_name: p.from_name } : {}) };
 return [{ json: { chat_id: p.chat_id, intent: p.intent || null, guest_id: p.guest_id || null, booking_id: p.booking_id || null, room: p.room,
   guest_name: p.guest_name || (p.from_name ? p.from_name + ' (not linked to a booking)' : 'Unknown guest'),
-  question: p.question, reply, escalate, ai_answered: ai, markup, confirm_data: confirm,
+  question: p.question, staff_question: staffQuestion, reply, escalate, ai_answered: ai, markup, confirm_data: confirm,
   kind, category, alert_title, chase: !!p.chase, chase_id: p.chase_id || null, chase_next: p.chase_next || 0, chase_alert: !!p.chase_alert, chase_text: p.chase_text || '',
   save_draft: !!(p.booking_flow || p.draft_changed), draft_row: row } }];

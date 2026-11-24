@@ -6,6 +6,10 @@ const guest = data.guest || {};                         // {} when this chat is 
 const chat = $('Classify').first().json;
 const settings = Object.fromEntries(Object.entries(data.settings || {}).map(([k, v]) => [k, String(v || '').trim()]));
 const rooms = (data.rooms || []).filter(r => r.name).map(r => ({ name: r.name, rate: r.nightly_rate }));
+// other services the hotel sells (event hall, gym, pool ...): the same call returns them, with the days an exclusive one is taken
+const services = (data.services || []).filter(s => s.name).map(s => ({ name: s.name, price: Number(s.price) || 0, unit: s.unit, exclusive: !!s.exclusive, booked: s.booked || [] }));
+const PER = { per_event: 'per event', per_day: 'per day', per_head: 'per person', per_month: 'per month', per_visit: 'per visit' };
+const svcLines = services.map(s => `- ${s.name}: ${s.price ? s.price.toLocaleString('en-US') + ' naira ' + (PER[s.unit] || '') : 'price on request'}${s.exclusive ? ' (one booking per day)' : ''}`).join('\n');
 const tz = (chat.hotel || {}).timezone || 'Africa/Lagos';             // the hotel's own clock
 const hotelName = settings.HOTEL_NAME || (chat.hotel || {}).name || 'the hotel';
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());       // YYYY-MM-DD
@@ -56,15 +60,16 @@ ROOM AVAILABILITY AND BOOKING (handled by the system from live room data, never 
 - check_in and check_out: YYYY-MM-DD, only from dates the guest gave in this conversation. Work out words like "tomorrow", "this Friday", "next weekend" or "3 nights from Monday" from TODAY below. If they give only a number of nights, compute check_out from check_in. Use null for anything they did not state. In a normal week, a weekend stay means Friday to Sunday.
 - room_type: exactly one of the ROOM TYPES names below, or null. guest_name: only when the guest states the name the booking is for. phone: only when the guest types a phone number.
 - Return only values stated or changed in the guest's LATEST message; do not copy values from BOOKING IN PROGRESS.
-- ARRIVAL TIME: if the guest says they will arrive late, or gives a time they expect to arrive, set notify_staff to true with kind "question" and category null, set can_answer to true, and answer in one courteous sentence that you have told the team to expect them around that time. Do not promise anything else about the room.
+${services.length ? `- OTHER SERVICES (the SERVICES listed below: event hall, gym, pool and the like; handled by the system, never by you): when the guest wants to book or reserve one of them, or asks whether one is free on a date, set "intent" to "service", can_answer true and answer empty. NEVER say yourself that a service is free, booked or confirmed: the system replies and passes the request to the team. A question that only asks the price or what a service includes is "info": answer it from the SERVICES and the KNOWLEDGE. service: exactly one of the SERVICES names, taken from the guest's latest message or the recent conversation, or null. service_date and service_end: YYYY-MM-DD, worked out from TODAY (service_end only when it lasts several days). service_qty: a whole number of people, days or months, only if the guest said it. wants_to_book: true when they want it booked or reserved, false when they only ask if it is free or what it costs.
+` : ''}- ARRIVAL TIME: if the guest says they will arrive late, or gives a time they expect to arrive, set notify_staff to true with kind "question" and category null, set can_answer to true, and answer in one courteous sentence that you have told the team to expect them around that time. Do not promise anything else about the room.
 - When notify_staff is true, also say what kind of thing it is. "kind": "request" when the guest asks staff to DO something (towels, cleaning, repair, food, a ride, late checkout, changing a booking); "complaint" when they report something wrong or unhappy (broken AC, noise, dirty room, rude service, no water or power); "emergency" for danger to life, fire, medical trouble or a security threat; "question" for anything else staff just need to answer. "category": "maintenance" (repairs, AC, power, water, Wi-Fi equipment), "housekeeping" (cleaning, towels, linen), "food" (restaurant, room service), "transport" (airport pickup, taxi), "booking" (changes, cancellations, refunds, payments) or "other". When notify_staff is false use kind "question" and category null.
-Reply with JSON only: {"intent": "info"|"availability"|"book"|"cancel_draft"|"other", "can_answer": true|false, "notify_staff": true|false, "kind": "question"|"request"|"complaint"|"emergency", "category": null, "answer": "text for the guest", "check_in": null, "check_out": null, "room_type": null, "guest_name": null, "phone": null}
+Reply with JSON only: {"intent": "info"|"availability"|"book"|"cancel_draft"${services.length ? '|"service"' : ''}|"other", "can_answer": true|false, "notify_staff": true|false, "kind": "question"|"request"|"complaint"|"emergency", "category": null, "answer": "text for the guest", "check_in": null, "check_out": null, "room_type": null, "guest_name": null, "phone": null${services.length ? ', "service": null, "service_date": null, "service_end": null, "service_qty": null, "wants_to_book": false' : ''}}
 
 TODAY: ${today} (${weekday}), ${tz}.
 
 ROOM TYPES: ${rooms.length ? rooms.map(r => r.name).join(', ') : 'none listed'}
 
-${draftLine}
+${services.length ? 'SERVICES:\n' + svcLines + '\n\n' : ''}${draftLine}
 
 GUEST CONTEXT:
 ${ctx}
@@ -79,5 +84,5 @@ messages.push({ role: 'user', content: userText });
 return [{ json: { chat_id: chat.chat_id, text: chat.text || '', from_name: chat.from_name || '',
   guest_id: guest.id || '', guest_name: guest.name || '', guest_phone: guest.phone || '',
   booking_id: b ? b.id : null, room: b && b.room_number || '',
-  today, rooms, draft, hotel: hotelName, open_items: data.open_items || [],
+  today, rooms, services, draft, hotel: hotelName, open_items: data.open_items || [],
   body: { model: '__MODEL__', temperature: 0, messages, response_format: { type: 'json_object' } } } }];

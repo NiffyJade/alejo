@@ -72,9 +72,9 @@ def main():
     hid, secret = brightside["id"], brightside["sec"]
     results = []
 
-    def check(name, ok):
+    def check(name, ok, detail=""):
         results.append(ok)
-        print(("PASS " if ok else "FAIL ") + name)
+        print(("PASS " if ok else "FAIL ") + name + ("" if ok else "  -> " + str(detail)[:200]))
 
     try:
         # 1. wrong / missing secret: ignored, nothing written
@@ -90,6 +90,7 @@ def main():
         import build_n8n_workflows as b
         name = "Hotel Guest Journey - Telegram Bot" + ("" if not suffix else " (" + suffix + ")")
         wid = next(x["id"] for x in b.api("GET", "/workflows?limit=250")["data"] if x["name"] == name)
+        time.sleep(10)            # runs from the wrong-secret step above are saved a little later: take the baseline after they are in
         known = {x["id"] for x in b.api("GET", f"/executions?workflowId={wid}&limit=10")["data"]}
         post(path, update(FAKE_CHAT, "What time is check-in?", 3), secret=secret)
         run = None

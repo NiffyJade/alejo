@@ -24,7 +24,8 @@ else if (kind === 'request' || kind === 'complaint') holding = pidgin
 // Language of the replies the code writes: Pidgin if this message is Pidgin; a very short message ("Deluxe", "yes") or a shared contact keeps the draft's language.
 const nWords = (ctx.text || '').trim().split(/\s+/).filter(Boolean).length;
 const lang = pidgin ? 'pcm' : (!ctx.text || nWords <= 3) ? ((ctx.draft && ctx.draft.lang) || 'en') : 'en';
-let intent = ['info', 'availability', 'book', 'cancel_draft', 'other'].includes(p.intent) ? p.intent : 'other';
+const hasServices = (ctx.services || []).length > 0;         // "service" is only believed from a hotel that sells some
+let intent = ['info', 'availability', 'book', 'cancel_draft', 'other'].concat(hasServices ? ['service'] : []).includes(p.intent) ? p.intent : 'other';
 const s = v => (typeof v === 'string' ? v.trim() : '');
 const dd = ctx.draft || {};
 const inProgress = !!(dd.check_in || dd.check_out || dd.room_type || dd.guest_name || dd.phone);
@@ -43,7 +44,7 @@ const extra = ['availability', 'book'].includes(intent) && ok && !sharedContact 
 // A guest chasing something already open ("any update?") must not create a second item: nudge staff about the existing one.
 const openItems = ctx.open_items || [];
 const CHASE = /\b(any (update|news)|updates? (please|pls|abeg)|still waiting|still no(t)?|taking (so |too )?long|nobody (has )?(come|came|called)|no one (has )?(come|came|called)|i dey wait|e don tey|wetin (dey )?happen|following up|chasing)\b/i;
-const chase = openItems.length > 0 && CHASE.test(ctx.text || '') && nWords <= 14 && !inProgress && !['book', 'availability'].includes(intent) && !danger;
+const chase = openItems.length > 0 && CHASE.test(ctx.text || '') && nWords <= 14 && !inProgress && !['book', 'availability', 'service'].includes(intent) && !danger;
 let chaseInfo = {};
 if (chase) {
   const it = openItems[0], mins = Math.max(1, Math.round((Date.now() - Date.parse(it.created_at)) / 60000));
@@ -60,5 +61,6 @@ if (chase) {
 }
 return [{ json: { ...ctx, ...chaseInfo, intent, lang,
   check_in: s(p.check_in), check_out: s(p.check_out), room_type_said: s(p.room_type), name_said: s(p.guest_name), phone_said: s(p.phone),
+  service_said: s(p.service), service_date: s(p.service_date), service_end: s(p.service_end), service_qty: Number.isInteger(p.service_qty) ? p.service_qty : 0, wants_to_book: p.wants_to_book === true,
   question: ctx.text || '(shared their phone number)', reply: chase ? chaseInfo.chase_reply : useAnswer ? p.answer.trim() : holding, info_answer: chase ? '' : extra,
   escalate, ai_answered: chase ? false : useAnswer, kind: chase ? 'question' : kind, category: chase ? null : category } }];

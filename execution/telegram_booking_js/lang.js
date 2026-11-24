@@ -37,6 +37,16 @@ const LANG = {
     followup: (name, type, range) => `Hi${name ? ' ' + name : ''}! 👋 You were looking at a ${type} room for ${range}. Would you like to carry on with your booking? I can pick up where we stopped and check the room again for you.`,
     followup_yes: 'Yes, continue',
     followup_no: 'No, thanks',
+    // other services (event hall, gym, pool ...): every fact (price, dates, counts) is filled in by code
+    svc_which: list => `Happy to help! Which would you like: ${list}?`,
+    svc_unknown: (x, list) => `We don't have "${x}". We can help with: ${list}. Which would you like?`,
+    svc_past: d => `That date (${d}) has already passed. Which date would you like?`,
+    svc_ask_date: name => `Which date would you like the ${name}? For example: "this Saturday" or "12 December".`,
+    svc_taken: (name, range, taken) => `Sorry, the ${name} is already booked on ${taken}${range !== taken ? ' (you asked for ' + range + ')' : ''}. Would another date work?`,
+    svc_free: (name, range) => `Good news, the ${name} is free on ${range}.`,
+    svc_offer: ' Would you like me to pass a booking request to our team?',
+    svc_pass: (name, cost, range) => `I have passed your request for the ${name}${range ? ' on ' + range : ''} to our team. ${cost} They will confirm the details with you here, including any deposit.`,
+    svc_cost: (price, per, total, qty) => price > 0 ? `The price is ${NGN(price)} naira ${per}${total ? ` (${NGN(total)} naira for ${qty})` : ''}.` : 'Our team will confirm the price.',
   },
   pcm: {
     cleared: 'No wahala, I don clear that booking request. Anything else wey I fit help you with?',
@@ -71,6 +81,17 @@ const LANG = {
     followup: (name, type, range) => `Hi${name ? ' ' + name : ''}! 👋 You dey look ${type} room for ${range}. You still wan carry on with the booking? I fit continue from where we stop, and check the room again for you.`,
     followup_yes: 'Yes, continue',
     followup_no: 'No, thank you',
+    svc_which: list => `Make I help you! Which one you want: ${list}?`,
+    svc_unknown: (x, list) => `We no get "${x}". Na these ones we get: ${list}. Which one you want?`,
+    svc_past: d => `That date (${d}) don pass. Which date you want?`,
+    svc_ask_date: name => `Which date you want the ${name}? Example: "this Saturday" or "12 December".`,
+    svc_taken: (name, range, taken) => `Sorry, the ${name} don dey booked on ${taken}${range !== taken ? ' (na ' + range + ' you ask for)' : ''}. You wan try another date?`,
+    svc_free: (name, range) => `Good news o, the ${name} dey free on ${range}.`,
+    svc_offer: ' You wan make I send booking request give our team?',
+    svc_pass: (name, cost, range) => `I don send your request for the ${name}${range ? ' on ' + range : ''} give our team. ${cost} Dem go confirm the details with you here, including any deposit.`,
+    svc_cost: (price, per, total, qty) => price > 0 ? `The price na ${NGN(price)} naira ${per}${total ? ` (${NGN(total)} naira for ${qty})` : ''}.` : 'Our team go confirm the price.',
   },
 };
+const SVC_PER = { per_event: 'per event', per_day: 'per day', per_head: 'per person', per_month: 'per month', per_visit: 'per visit' };
+const svcQty = (unit, n) => (unit === 'per_head' ? (n === 1 ? '1 person' : `${n} people`) : `${n} ${({ per_day: 'day', per_month: 'month', per_visit: 'visit', per_event: 'event' })[unit] || 'time'}${n === 1 ? '' : 's'}`);
 const tr = (lang, key, ...a) => { const v = (LANG[lang] || LANG.en)[key]; return typeof v === 'function' ? v(...a) : v; };

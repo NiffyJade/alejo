@@ -20,9 +20,9 @@ const AVAIL = (over = {}) => [['Standard', 35000, 4], ['Deluxe', 55000, 2], ['Su
   .map(([room_type, nightly_rate, n]) => ({ room_type, nightly_rate, available_rooms: over[room_type] ?? n }));
 
 // One full turn: model output -> Parse AI -> Plan booking -> (availability rows) -> Compose reply
-function turn({ say, llm, draft = {}, guest = {}, rows = AVAIL(), open = [] }) {
+function turn({ say, llm, draft = {}, guest = {}, rows = AVAIL(), open = [], services = [] }) {
   const ctx = { chat_id: 1, text: say, from_name: 'Ada', guest_id: guest.id || '', guest_name: guest.name || '', guest_phone: guest.phone || '',
-    booking_id: null, room: '', today: TODAY, rooms: ROOMS, draft, hotel: 'BrightSide Hotel', open_items: open };
+    booking_id: null, room: '', today: TODAY, rooms: ROOMS, draft, hotel: 'BrightSide Hotel', open_items: open, services };
   const ai = { message: { content: [{ type: 'text', text: JSON.stringify({ can_answer: true, notify_staff: false, answer: '', ...llm }) }] } };
   const parsed = run('parse_ai.js', { 'Build prompt': [ctx] }, [ai]);
   const plan = run('plan_booking.js', { 'Parse AI': parsed }, parsed);
@@ -297,4 +297,109 @@ ok('a new, different request while one is open is still its own item when it doe
   const t = turn({ say: 'my room needs a plumber now', llm: { intent: 'other', can_answer: false, notify_staff: true, kind: 'complaint', category: 'maintenance' }, open: [ITEM()] });
   assert(!t.out.chase); assert.strictEqual(t.out.kind, 'complaint');
 });
-console.log(n + ' tests passed (chasing included)');
+
+// ============================================================ other services: event hall, gym, pool (sql/025 + 027)
+// The bot quotes prices, says whether an exclusive service (the hall) is free from the days the database lists as taken, and passes a booking
+// request to staff. It never books a service itself and never lets the model say "free", "booked" or "confirmed".
+const SERV = [
+  { name: 'Event hall', price: 250000, unit: 'per_event', exclusive: true, booked: [[plus(10), plus(11)], [plus(20), plus(20)]] },
+  { name: 'Pool', price: 3000, unit: 'per_head', exclusive: false, booked: [] },
+  { name: 'Gym membership', price: 18000, unit: 'per_month', exclusive: false, booked: [] },
+  { name: 'Lounge', price: 0, unit: 'per_visit', exclusive: false, booked: [] },
+];
+const SVC = (over = {}) => ({ intent: 'service', service: 'Event hall', service_date: plus(15), wants_to_book: true, ...over });
+const svcTurn = (say, llm, extra = {}) => turn({ say, llm: SVC(llm), services: SERV, ...extra });
+
+ok('the hall on a free day: the guest is told it is free and the request goes to staff as a booking request', () => {
+  const t = svcTurn('I want to book the event hall', {});
+  assert.strictEqual(t.out.escalate, true); assert.strictEqual(t.out.kind, 'request'); assert.strictEqual(t.out.category, 'booking');
+  assert(/is free on/.test(t.out.reply) && /passed your request/.test(t.out.reply) && /250,000 naira per event/.test(t.out.reply), t.out.reply);
+  assert(/Event hall booking request: [A-Z][a-z]{2} \d+ [A-Z][a-z]{2}\. 250,000 naira per event/.test(t.out.staff_question) && /I want to book the event hall/.test(t.out.staff_question), t.out.staff_question);
+  assert.strictEqual(t.out.question, 'I want to book the event hall'); assert.strictEqual(t.out.markup, 'none');
+});
+ok('the hall on a taken day: told it is taken (with the dates), nothing is sent to staff', () => {
+  const t = svcTurn('book the hall', { service_date: plus(10) });
+  assert.strictEqual(t.out.escalate, false); assert(/already booked/.test(t.out.reply) && /another date/.test(t.out.reply), t.out.reply);
+  assert(!/passed your request/.test(t.out.reply));
+});
+ok('a range that touches a taken day is taken, even when it starts on a free day', () => {
+  const t = svcTurn('hall for two days', { service_date: plus(9), service_end: plus(10) });
+  assert(/already booked/.test(t.out.reply) && t.out.escalate === false, t.out.reply);
+});
+ok('the day after a taken range is free, and a long free range is passed on with its dates', () => {
+  assert(/is free on/.test(svcTurn('hall', { service_date: plus(12) }).out.reply));
+  const t = svcTurn('hall for three days', { service_date: plus(12), service_end: plus(14) });
+  assert.strictEqual(t.out.escalate, true); assert(/ to /.test(t.out.reply));
+});
+ok('just asking whether the hall is free (not booking it) answers and offers to pass a request, without alerting staff', () => {
+  const t = svcTurn('is the hall free that day?', { wants_to_book: false });
+  assert.strictEqual(t.out.escalate, false); assert(/is free on/.test(t.out.reply) && /Would you like me to pass a booking request/.test(t.out.reply), t.out.reply);
+});
+ok('no date yet: the bot asks for it and alerts nobody', () => {
+  const t = svcTurn('I want the hall', { service_date: null });
+  assert.strictEqual(t.out.escalate, false); assert(/Which date/.test(t.out.reply), t.out.reply);
+});
+ok('a past date is refused politely', () => {
+  const t = svcTurn('hall yesterday', { service_date: plus(-3) });
+  assert.strictEqual(t.out.escalate, false); assert(/already passed/.test(t.out.reply), t.out.reply);
+});
+ok('no service named: the bot lists what the hotel offers', () => {
+  const t = svcTurn('I want to book something', { service: null });
+  assert.strictEqual(t.out.escalate, false); assert(/Event hall, Pool, Gym membership, Lounge/.test(t.out.reply), t.out.reply);
+});
+ok('a service the hotel does not have is not invented', () => {
+  const t = svcTurn('book the helipad', { service: 'Helipad' });
+  assert.strictEqual(t.out.escalate, false); assert(/don't have "Helipad"/.test(t.out.reply) && /Event hall/.test(t.out.reply), t.out.reply);
+});
+ok('the pool by the head: the total follows the number of people and the request goes to staff', () => {
+  const t = svcTurn('pool for 5 people tomorrow', { service: 'Pool', service_date: plus(1), service_qty: 5 });
+  assert.strictEqual(t.out.escalate, true); assert(/3,000 naira per person/.test(t.out.reply) && /15,000 naira for 5 people/.test(t.out.reply), t.out.reply);
+  assert(/5 people/.test(t.out.staff_question), t.out.staff_question);
+});
+ok('a monthly gym membership: the total follows the months', () => {
+  const t = svcTurn('gym for 2 months from monday', { service: 'Gym membership', service_date: plus(3), service_qty: 2 });
+  assert(/18,000 naira per month/.test(t.out.reply) && /36,000 naira for 2 months/.test(t.out.reply), t.out.reply);
+});
+ok('a service with no fixed price says the team will confirm it, and no price is invented', () => {
+  const t = svcTurn('lounge tonight', { service: 'Lounge', service_date: plus(1) });
+  assert(/confirm the price/.test(t.out.reply) && !/naira/.test(t.out.reply), t.out.reply);
+});
+ok('a service name in other letters still matches, and a made-up quantity is ignored', () => {
+  const t = svcTurn('pool', { service: 'pool', service_date: plus(2), service_qty: -4 });
+  assert(/passed your request/.test(t.out.reply) && !/for -4/.test(t.out.reply), t.out.reply);
+});
+ok('Pidgin in, Pidgin out (prices and dates unchanged)', () => {
+  const t = svcTurn('abeg i wan book the event hall', {});
+  assert(/dey free/.test(t.out.reply) && /250,000 naira/.test(t.out.reply) && t.out.escalate === true, t.out.reply);
+});
+ok('a service request does not disturb a room booking the guest was in the middle of', () => {
+  const draft = asDraft(t4.out);
+  const t = svcTurn('book the hall too', {}, { draft });
+  assert.strictEqual(t.out.draft_row.check_in, FRI); assert.strictEqual(t.out.draft_row.room_type, 'Deluxe'); assert.strictEqual(t.out.save_draft, false);
+});
+ok('a hotel with no services: "service" from the model is not trusted, the guest goes to staff as before', () => {
+  const t = turn({ say: 'book the hall', llm: SVC({ can_answer: true, answer: '' }), services: [] });
+  assert.strictEqual(t.out.escalate, true); assert(!/passed your request/.test(t.out.reply));
+});
+ok('the model can never put availability, bookings or prices in a service reply (only the code does)', () => {
+  const t = svcTurn('book the hall', { answer: 'Booked! The hall is yours for 1,000 naira.', can_answer: true });
+  assert(!/1,000/.test(t.out.reply) && !/Booked!/.test(t.out.reply), t.out.reply);
+});
+ok('the Inbox item and the staff alert use the full summary, but the guest\'s own words are what get logged', () => {
+  const t = svcTurn('hall please on the 15th', {});
+  assert(t.out.staff_question !== t.out.question && t.out.question === 'hall please on the 15th');
+});
+ok('the prompt shows the services (with price, unit and one-per-day) only to a hotel that has some', () => {
+  const nodes = (services) => ({ 'Load context': [{ guest: {}, settings: {}, rooms: [], knowledge: [], services, history: [] }], 'Classify': [{ chat_id: 1, text: 'hi', from_name: 'A', hotel: { name: 'H', timezone: 'Africa/Lagos' } }] });
+  const withS = run('build_prompt.js', nodes(SERV), [{}])[0], without = run('build_prompt.js', nodes([]), [{}])[0];
+  const sys = withS.body.messages[0].content, sys0 = without.body.messages[0].content;
+  assert(/SERVICES:/.test(sys) && /Event hall: 250,000 naira per event \(one booking per day\)/.test(sys) && /Pool: 3,000 naira per person/.test(sys) && /Lounge: price on request/.test(sys), sys.slice(sys.indexOf('SERVICES:'), sys.indexOf('SERVICES:') + 400));
+  assert(/"service"/.test(sys) && /"intent" to "service"/.test(sys));
+  assert(!/SERVICES:/.test(sys0) && !/"service"/.test(sys0), 'a hotel without services gets the same prompt as before');
+  assert.strictEqual(withS.services.length, 4); assert.strictEqual(without.services.length, 0);
+});
+ok('a guest chasing an open item is not mistaken for a service request', () => {
+  const t = svcTurn('any update?', { intent: 'other', can_answer: false, notify_staff: false }, { open: [ITEM()] });
+  assert(t.out.chase);
+});
+console.log(n + ' tests passed (chasing and services included)');

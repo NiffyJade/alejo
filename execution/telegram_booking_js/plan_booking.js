@@ -49,9 +49,24 @@ if (nights > 30) {
   longStay = true;
   d.check_out = null;
 }
+// other services (event hall, gym, pool): which one, which days, how many, and (for a one-booking-per-day service) is it taken.
+// The taken days come with the guest's message (bot_context); nothing here changes any data.
+const svcPlan = { svc: null, date: '', end: '', qty: 0, problem: '', problem_arg: '', clash: null, unknown: '' };
+if (a.intent === 'service') {
+  const list = a.services || [];
+  if (a.service_said) { svcPlan.svc = list.find(x => x.name.toLowerCase() === a.service_said.toLowerCase()) || null; if (!svcPlan.svc) svcPlan.unknown = a.service_said; }
+  if (isDate(a.service_date)) { if (a.service_date < today) { svcPlan.problem = 'past'; svcPlan.problem_arg = fmt(a.service_date); } else svcPlan.date = a.service_date; }
+  if (svcPlan.date && isDate(a.service_end) && a.service_end > svcPlan.date && (Date.parse(a.service_end) - Date.parse(svcPlan.date)) / 86400000 <= 60) svcPlan.end = a.service_end;
+  svcPlan.qty = Number.isInteger(a.service_qty) && a.service_qty > 0 ? Math.min(a.service_qty, 10000) : 0;
+  if (svcPlan.svc && svcPlan.svc.exclusive && svcPlan.date) {
+    const last = svcPlan.end || svcPlan.date;
+    const hit = (svcPlan.svc.booked || []).find(r => r[0] <= last && r[1] >= svcPlan.date);
+    if (hit) svcPlan.clash = hit[0] === hit[1] ? fmt(hit[0]) : `${fmt(hit[0])} to ${fmt(hit[1])}`;
+  }
+}
 const ready = !!(d.check_in && d.check_out);
 const sameDraft = JSON.stringify([d.check_in, d.check_out, d.room_type, d.guest_name, d.phone, d.phone_verified]) ===
   JSON.stringify([old.check_in || null, old.check_out || null, old.room_type || null, old.guest_name || null, old.phone || null, !!old.phone_verified]);
 return [{ json: { ...a, draft_new: d, draft_cleared: cleared, draft_changed: !sameDraft, booking_flow: bookingIntent || cleared,
-  problem, problem_arg: problemArg, unknown_room: unknownRoom, long_stay: longStay, nights, ready,
+  problem, problem_arg: problemArg, unknown_room: unknownRoom, long_stay: longStay, nights, ready, svc_plan: svcPlan,
   rpc: { p_check_in: ready ? d.check_in : today, p_check_out: ready ? d.check_out : addDays(today, 1), p_room_type: null, p_chat_id: a.chat_id } } }];

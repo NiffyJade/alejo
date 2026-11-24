@@ -373,13 +373,13 @@ return [{ json: { ...u, hotel: $input.first().json.hotel } }];
     esc = if_node(w, "Needs staff?", "={{ $json.escalate }}", "boolean", "true", (3340, -60))
     post_staff = tg_send(w, "Alert staff group", STAFF,
                          "={{ $json.alert_title }}\nGuest: {{ $json.guest_name }}{{ $json.room ? ' (Room ' + $json.room + ')' : '' }}\n"
-                         "Message: \"{{ $json.question }}\"\n"
+                         "Message: \"{{ $json.staff_question || $json.question }}\"\n"
                          "{{ $json.ai_answered ? 'AI replied: ' + $json.reply : 'AI could not answer from the knowledge base.' }}\n\n"
                          "Reply to THIS message to answer the guest. Start your reply with #kb to also save it as a general answer.",
                          (3560, -160))
     save_esc = http(w, "Save escalation", "POST", "=" + SB + "/escalations", (3780, -160), prefer="return=minimal",
                     body="={{ JSON.stringify({ guest_id: " + CR + ".guest_id, booking_id: " + CR + ".booking_id, "
-                         "guest_chat_id: " + CR + ".chat_id, question: " + CR + ".question, "
+                         "guest_chat_id: " + CR + ".chat_id, question: (" + CR + ".staff_question || " + CR + ".question), "
                          "kind: " + CR + ".kind, category: " + CR + ".category, "
                          "staff_message_id: ($json.result ? $json.result.message_id : $json.message_id) }) }}")
     style_rules = []
