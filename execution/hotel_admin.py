@@ -8,6 +8,7 @@ Usage (from the project root):
   python -I execution/hotel_admin.py webhook SLUG        (points the hotel's Telegram bot at the n8n workflow, with its secret)
   python -I execution/hotel_admin.py webhook-info SLUG   (what Telegram says about the hotel's webhook; no secrets)
   python -I execution/hotel_admin.py rooms SLUG FILE.json        (load room types; an existing one keeps its count and on/off switch)
+  python -I execution/hotel_admin.py services SLUG FILE.json [--replace]   (load bookable services: event hall, gym, pool; needs sql/025)
   python -I execution/hotel_admin.py facts SLUG FILE.json        (load the hotel's own knowledge entries; same id = refreshed)
   python -I execution/hotel_admin.py pause|resume SLUG            (switch a hotel off/on: the scheduler and bookings skip a switched-off hotel)
   python -I execution/hotel_admin.py adopt-legacy-secrets SLUG   (the pre-multi-hotel phone/booking secrets from .env become this hotel's)
@@ -145,6 +146,32 @@ def main(a):
                 q(f"delete from room_types where hotel_id = {lit(h['id'])} and name = {lit(name)}")
             print("removed room types not in the file:", gone or "none")
         for r in q(f"select name, total_rooms, nightly_rate, active from room_types where hotel_id = {lit(h['id'])} order by nightly_rate"):
+            print(json.dumps(r))
+    elif cmd == "services":
+        # load the hotel's bookable services (event hall, gym, pool ...) from a JSON file
+        # ({"services": [{name, price, unit: per_event|per_day|per_head|per_month|per_visit, exclusive, active, sort, notes}]}).
+        # Needs sql/025_services.sql. An existing service keeps its on/off switch; its price, unit, exclusivity, order and notes are refreshed.
+        h = hotel(pos[0])
+        data = json.loads(Path(pos[1]).read_text(encoding="utf-8"))["services"]
+        units = ("per_event", "per_day", "per_head", "per_month", "per_visit")
+        for r in data:
+            name, price, unit = str(r["name"]).strip(), float(r["price"]), r.get("unit", "per_event")
+            if not name or len(name) > 80 or price < 0 or unit not in units:
+                sys.exit(f"bad service entry: {r}")
+            q(f"insert into hotel_services (hotel_id, name, price, unit, exclusive, active, sort, notes) values ({lit(h['id'])}, {lit(name)}, {price}, {lit(unit)}, "
+              f"{'true' if r.get('exclusive', False) else 'false'}, {'true' if r.get('active', True) else 'false'}, {int(r.get('sort', 0))}, {lit(r.get('notes', ''))}) "
+              f"on conflict (hotel_id, name) do update set price = excluded.price, unit = excluded.unit, exclusive = excluded.exclusive, sort = excluded.sort, notes = excluded.notes")
+        if "--replace" in a:
+            keep = ", ".join(lit(str(r["name"]).strip()) for r in data)
+            gone = [r["name"] for r in q(f"select name from hotel_services where hotel_id = {lit(h['id'])} and name not in ({keep})")]
+            for name in gone:
+                used = q(f"select count(*) as n from service_bookings sb join hotel_services hs on hs.id = sb.service_id where hs.hotel_id = {lit(h['id'])} and hs.name = {lit(name)}")[0]["n"]
+                if used:
+                    sys.exit(f"cannot remove '{name}': {used} booking(s) still use it (switch it off instead)")
+            for name in gone:
+                q(f"delete from hotel_services where hotel_id = {lit(h['id'])} and name = {lit(name)}")
+            print("removed services not in the file:", gone or "none")
+        for r in q(f"select name, price, unit, exclusive, active from hotel_services where hotel_id = {lit(h['id'])} order by sort, name"):
             print(json.dumps(r))
     elif cmd == "facts":
         # load a hotel's own knowledge entries from a JSON file ({"entries": [{id, category, question, answer, source?}]}).
