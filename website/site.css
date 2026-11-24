@@ -2,16 +2,19 @@
    One margin pair, one corner radius (4px), one button shape. Brand blue stays the AI hue. */
 :root {
   --bg: #ffffff;
-  --surface: #f3f3f3;
-  --surface-2: #e6e6e6;
-  --surface-3: #d8d8d8;
-  --ink: #232323;
-  --muted: #4f4f4f;
-  --dark: #111111;
+  --surface: #f1f3f8;
+  --surface-2: #e6e9f1;
+  --surface-3: #d9dde8;
+  --ink: #14172b;
+  --muted: #4d5468;
+  --dark: #14172b;
+  --lime: #d6f26c;
+  --lime-soft: #eef8c8;
+  --display: 'Cabinet Grotesk', 'General Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --accent: #1a4be0;
   --accent-ink: #ffffff;
-  --line: #dcdcdc;
-  --r: 4px;
+  --line: #dfe3ec;
+  --r: 24px;
   --m: clamp(20px, 4vw, 48px);
   --head-h: 72px;
   --step-small: 0.875rem;
@@ -460,3 +463,70 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
   .text-link { display: inline-flex; align-items: center; min-height: 44px; }
   .chip { min-height: 44px; }
 }
+
+/* ---------- Skin v3, "Ink & Lime" (2026-11-24): the same page, the same words, in the dashboard's colours and shapes ----------
+   Ink replaces black and the big blue blocks, lime marks "you are here" and the one thing to press, corners are round, buttons are pills,
+   headings use Cabinet Grotesk (at a calm weight, so the airy feel stays). Blue stays for the AI: the chat mark, links and focus. */
+h1, h2, .price, .wordmark, .brand { font-family: var(--display); }
+h1, h2 { font-weight: 500; letter-spacing: -0.032em; }
+.price { font-weight: 500; letter-spacing: -0.03em; }
+.wordmark { font-weight: 800; letter-spacing: -0.04em; }
+.brand { font-weight: 800; font-size: 1.375rem; letter-spacing: -0.02em; }
+
+/* buttons are pills; on ink, the main button is lime */
+.btn { border-radius: 999px; }
+.btn:hover { background: #2a2f4d; }
+.btn-line { border: 1.5px solid var(--line); }
+.btn-light:hover { background: var(--surface); }
+.plan-rec .btn, .cta-field .btn { background: var(--lime); color: var(--ink); font-weight: 600; }
+.plan-rec .btn:hover, .cta-field .btn:hover { background: #e4f98a; }
+.menu-btn { border-radius: 999px; }
+.mock-btn { border-radius: 999px; }
+.tg-btn { border-radius: 999px; }
+
+/* round cards */
+.stage, .field, .plan, .ftile, .slide-stack, .ex-stage { border-radius: 28px; }
+details { border-radius: 24px; }
+.cta-field { border-radius: 36px; }
+.chat { border-radius: 24px; }
+.frag { border-radius: 22px; }
+.dialog { border-radius: 28px; }
+.scard, .irow { border-radius: 18px; }
+.dialog input[type="text"], .dialog input[type="email"], .seg span { border-radius: 14px; }
+.irow-reply input { border-radius: 12px; }
+.chat-log { background: #f5f6fa; }
+.msg.in { border-color: #e6e9f1; }
+
+/* hero: the chat sits on a soft lime panel */
+.stage { background: var(--lime-soft); }
+.stage-note { color: #3f4a1a; }
+
+/* the stay in four steps: the private code is the "you are here" card */
+.fd-3 { background: var(--lime); color: var(--ink); }
+
+/* the guest's own messages are lime, like the staff reply in the dashboard */
+.msg.out { background: var(--lime); color: var(--ink); }
+
+/* the explorer's progress line and the reading bar are ink */
+.ex-fill { background: var(--ink); }
+.progress { background: var(--ink); }
+
+/* pricing: the recommended plan is ink */
+.plan-rec { background: var(--ink); color: #fff; }
+.plan-rec .price span { color: rgba(255, 255, 255, 0.78); }
+.plan-rec :focus-visible { outline-color: var(--lime); }
+
+/* questions: the open one is lime */
+details[open] { background: var(--lime); color: var(--ink); }
+details[open] summary:focus-visible { outline-color: var(--ink); }
+
+/* the demo block: ink with a soft lime and blue glow (the same as the sign-in page) */
+.cta-field { background-color: var(--ink); background-image: radial-gradient(900px 520px at 92% -12%, rgba(214, 242, 108, 0.26), transparent 62%), radial-gradient(760px 520px at -8% 112%, rgba(26, 75, 224, 0.4), transparent 60%); }
+.cta-text .body { color: rgba(255, 255, 255, 0.84); }
+.cta-field :focus-visible { outline-color: var(--lime); }
+.dialog :focus-visible { outline-color: var(--accent); }
+
+/* footer: the call to action is lime */
+.ft-cta { background: var(--lime); color: var(--ink); }
+.ft-cta:hover { background: #c9e85a; }
+.ft-cta:focus-visible { outline-color: var(--ink); }
