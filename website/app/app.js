@@ -48,6 +48,9 @@
     } }, mine ? 'Release' : c.owner ? 'Take over' : 'Take it');
   };
   const kindPill = (c) => (SERVICE(c) ? h('span', { class: 'pill kind ' + KIND_CLS(c), text: KIND_WORD(c) }) : null);
+  // a guest still checked in 30 minutes after the hotel's checkout time, or after their checkout day (the rule is in stay-core.js and is tested)
+  const checkoutText = () => String((window.FD_FACTS || {}).CHECKOUT_TIME || '');
+  const isOverdue = (b) => { const ST = window.AlejoStay; return !!ST && ST.overdue(b, FD.NOW.date, ST.minutesOf(FD.NOW.time), ST.deadlineMinutes(checkoutText())); };
   const dataHandlers = [];
   const onData = (fn) => dataHandlers.push(fn);                      // live.js announces fresh rows with an "alejo:data" event
   addEventListener('alejo:data', () => dataHandlers.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } }));
@@ -83,12 +86,14 @@
     const waiting = needs().sort((a, b) => rank(a) - rank(b) || waitMins(b) - waitMins(a));
     const arriving = B.filter((b) => b.in === today && b.stage < 4);
     const inHouse = B.filter((b) => b.stage >= 2 && b.stage < 4);
-    const leaving = B.filter((b) => b.out === today && b.stage < 4);
+    const overdue = B.filter(isOverdue);
+    const leaving = B.filter((b) => (b.out === today && b.stage < 4) || isOverdue(b));
     const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
     const longest = waiting.length ? [...waiting].sort((a, b) => waitMins(b) - waitMins(a))[0].ago : '';
 
     // the finding, then the one job
     const bits = [waiting.length ? `${plural(waiting.length, 'guest needs', 'guests need')} a person, the longest for ${longest}.${waiting.some(late) ? ' ' + plural(waiting.filter(late).length, 'item is', 'items are') + ' past the target.' : ''}` : 'Nobody is waiting on you. The AI has it.'];
+    if (overdue.length) bits.unshift(`${plural(overdue.length, 'guest is', 'guests are')} past checkout time (${checkoutText() || 'midday'}) and not checked out.`);
     if (held.length) bits.push(`${plural(held.length, 'answer is', 'answers are')} held back until ${plural(blank.length, 'fact is', 'facts are')} filled in.`);
     $('#ovSub').textContent = FD.NOW.label + '. ' + bits.join(' ');
     const cta = $('#ovCta');
@@ -132,7 +137,7 @@
 
     // arrivals and departures
     const grp = (label, list, none) => [h('p', { class: 'mgrp', text: `${label} (${list.length})` }),
-      ...(list.length ? list.slice(0, 3).map((b) => h('div', { class: 'mrow' }, disc(b.guest, b.hue), h('div', {}, h('b', { text: b.guest }), h('small', { text: `${b.type}, room ${b.room}` })), h('span', { class: 'amt', text: FD.naira(b.total) }))) : [h('p', { class: 'foot-note', text: none })])];
+      ...(list.length ? list.slice(0, 3).map((b) => h('div', { class: 'mrow' }, disc(b.guest, b.hue), h('div', {}, h('b', { text: b.guest }), h('small', { text: `${b.type}, room ${b.room}` }), isOverdue(b) ? h('span', { class: 'pill neg od', text: 'Checkout overdue' }) : null), h('span', { class: 'amt', text: FD.naira(b.total) }))) : [h('p', { class: 'foot-note', text: none })])];
     $('#ovMove').replaceChildren(...grp('Arriving', arriving, 'Nobody arrives today.'), ...grp('Leaving', leaving, 'Nobody leaves today.'));
 
     // stays, day by day: rooms down the side, days across, each state its own mark
@@ -323,16 +328,18 @@
   /* ---------- BOOKINGS ---------- */
   if (page === 'bookings') {
     const tabsEl = $('#btabs'), body = $('#bbody'), qEl = $('#bq'), sortEl = $('#bsort'), meta = $('#bmeta'), gq = $('#q');
-    let tab = ['arriving', 'inhouse', 'leaving', 'all'].includes(params.get('tab')) ? params.get('tab') : 'all', q = '';
+    let tab = ['arriving', 'inhouse', 'leaving', 'overdue', 'all'].includes(params.get('tab')) ? params.get('tab') : 'all', q = '';
     let B, today, sets;
     const compute = () => {
       B = FD.bookings; today = FD.NOW.date;
-      sets = { arriving: B.filter((b) => b.in === today), inhouse: B.filter((b) => b.stage >= 2 && b.stage < 4), leaving: B.filter((b) => b.out === today && b.stage < 4), all: B };
+      sets = { arriving: B.filter((b) => b.in === today), inhouse: B.filter((b) => b.stage >= 2 && b.stage < 4), leaving: B.filter((b) => b.out === today && b.stage < 4), overdue: B.filter(isOverdue), all: B };
+      if (tab === 'overdue' && !sets.overdue.length) tab = 'all';       // everyone has been checked out: the red tab goes away
     };
     compute();
-    const labels = [['arriving', 'Arriving today'], ['inhouse', 'In house'], ['leaving', 'Leaving today'], ['all', 'All']];
+    const labelsNow = () => [['arriving', 'Arriving today'], ['inhouse', 'In house'], ['leaving', 'Leaving today']].concat(sets.overdue.length ? [['overdue', 'Checkout overdue']] : [], [['all', 'All']]);
     const ST = window.AlejoStay;
-    const PILL = ['', 'ai', 'pos', 'warn', '', ''];                 // pill colour for each journey stage; the word is always shown too
+    const PILL = ['', 'ai', 'pos', 'warn', '', ''];
+    const statusOf = (b) => (isOverdue(b) ? { cls: 'neg', word: 'Checkout overdue' } : { cls: PILL[b.stage], word: FD.STAGE_WORD[b.stage] });                 // pill colour for each journey stage; the word is always shown too
     let sel = null;                                                 // the stay shown in the panel (its id)
     const payInfo = (b) => { const p = ST.pay(b); return p.state === 'none' ? ['', ''] : p.state === 'paid' ? ['pos', 'Paid in full'] : p.state === 'part' ? ['part', 'Paid ' + FD.naira(p.paid)] : ['neg', 'Unpaid']; };
     const pickTab = (id) => () => { tab = id; remember('tab', id); paintSum(); paint(); };
@@ -352,11 +359,12 @@
       detailEl.replaceChildren(...[
         h('div', { class: 'sd-head' }, disc(b.guest, b.hue, 'big'),
           h('div', {}, h('h2', { text: b.guest }), h('small', { text: b.ref }))),
-        h('span', { class: 'pill sd-pill ' + PILL[b.stage], text: FD.STAGE_WORD[b.stage] }),
+        h('span', { class: 'pill sd-pill ' + statusOf(b).cls, text: statusOf(b).word }),
         h('dl', { class: 'sd-kv' }, kv('Room', `${b.type}, room ${b.room}`), kv('Booked via', b.src), kv('Dates', `${FD.fmtDay(b.in)} to ${FD.fmtDay(b.out)}`), kv('Length', nights),
           kv('Total', FD.naira(b.total)), tel ? h('div', {}, h('dt', { text: 'Phone' }), h('dd', {}, h('a', { href: 'tel:' + tel, text: b.phone }))) : null),
         LIVE && pay.state !== 'none' ? h('div', { class: 'sd-pay ' + pay.state }, h('div', { class: 'sd-pay-t' }, h('b', { text: pay.state === 'paid' ? 'Paid in full' : pay.state === 'unpaid' ? 'Nothing paid yet' : `Paid ${FD.naira(pay.paid)} of ${FD.naira(pay.total)}` }),
           pay.balance > 0 ? h('span', { text: 'Balance ' + FD.naira(pay.balance) }) : null), h('i', { class: 'sd-bar', 'aria-hidden': 'true' }, h('b', { style: 'width:' + pay.pct + '%' }))) : null,
+        isOverdue(b) ? h('p', { class: 'sd-note od', text: `Past checkout time (${checkoutText() || 'midday'}). If they have left, check them out below. If they are staying on, tell the front desk.` }) : null,
         h('p', { class: 'sd-note ' + nt.tone, text: nt.text }),
         h('div', {}, h('h3', { text: 'Stay journey' }), h('ol', { class: 'sd-steps' }, ST.steps(b).map((s) => h('li', { class: s.state },
           h('span', { class: 'dot', 'aria-hidden': 'true', text: s.state === 'done' ? '✓' : '' }),
@@ -378,10 +386,10 @@
       if (opts && opts.reveal && matchMedia('(max-width: 1279px)').matches) detailEl.scrollIntoView({ block: 'start' });   // the panel sits under the list on narrow screens
     };
     const paint = () => {
-      tabsEl.replaceChildren(...labels.map(([id, l]) => h('button', { class: 'tab', role: 'tab', type: 'button', 'aria-selected': String(tab === id), onclick: () => { tab = id; remember('tab', id); paintSum(); paint(); } }, l, h('span', { class: 'n', text: String(sets[id].length) }))));
+      tabsEl.replaceChildren(...labelsNow().map(([id, l]) => h('button', { class: 'tab' + (id === 'overdue' ? ' od' : ''), role: 'tab', type: 'button', 'aria-selected': String(tab === id), onclick: () => { tab = id; remember('tab', id); paintSum(); paint(); } }, l, h('span', { class: 'n', text: String(sets[id].length) }))));
       let list = sets[tab].filter((b) => !q || (b.guest + ' ' + b.room + ' ' + b.ref).toLowerCase().includes(q));
       const key = sortEl.value;
-      const rank = (b) => (b.stage >= 4 ? 3 : b.in === today ? 0 : b.stage >= 2 ? 1 : 2);   // today's arrivals, then in house, then coming up, then done
+      const rank = (b) => (isOverdue(b) ? -1 : b.stage >= 4 ? 3 : b.in === today ? 0 : b.stage >= 2 ? 1 : 2);   // today's arrivals, then in house, then coming up, then done
       list = [...list].sort((a, b) => key === 'name' ? a.guest.localeCompare(b.guest) : key === 'total' ? b.total - a.total : key === 'in' ? a.in.localeCompare(b.in) || a.guest.localeCompare(b.guest) : rank(a) - rank(b) || a.in.localeCompare(b.in));
       meta.innerHTML = '';
       meta.append(h('b', { text: String(list.length) }), ` stay${list.length === 1 ? '' : 's'}, `, h('b', { text: FD.naira(list.reduce((s, b) => s + b.total, 0)) }));
@@ -390,7 +398,7 @@
         h('div', { class: 'id' }, disc(b.guest, b.hue), h('div', {}, h('b', { text: b.guest }), h('small', { text: b.ref + ' · ' + b.src + (b.linked === false ? ' · no code' : '') }))),
         h('div', {}, `${b.type}`, h('small', { class: 'sub', style: 'display:block;color:var(--muted);font-size:13px', text: 'Room ' + b.room })),
         h('div', {}, `${FD.fmtDay(b.in)} to ${FD.fmtDay(b.out)}`, h('small', { style: 'display:block;color:var(--muted);font-size:13px', text: `${b.nights} night${b.nights > 1 ? 's' : ''}` })),
-        h('div', { class: 'jr', title: b.note }, h('span', { class: 'pill ' + PILL[b.stage], text: FD.STAGE_WORD[b.stage] }), h('span', { class: 'bars', 'aria-hidden': 'true' }, FD.STAGES.map((s, i) => h('i', { class: i < b.stage ? 'done' : i === b.stage ? 'cur' : '' })))),
+        h('div', { class: 'jr', title: b.note }, h('span', { class: 'pill ' + statusOf(b).cls, text: statusOf(b).word }), h('span', { class: 'bars', 'aria-hidden': 'true' }, FD.STAGES.map((s, i) => h('i', { class: i < b.stage ? 'done' : i === b.stage ? 'cur' : '' })))),
         h('div', { class: 'num' }, FD.naira(b.total), LIVE && payInfo(b)[1] ? h('small', { class: 'paid ' + payInfo(b)[0], text: payInfo(b)[1] }) : null))) : [h('p', { class: 'foot-note', text: 'No stays match. Try another tab or clear the search.' })]));
       paintDetail(list.find((b) => b.id === sel));
     };

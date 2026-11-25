@@ -19,10 +19,19 @@ def backup(label):
     dest = ROOT / ".tmp" / f"wf_backup_{label}_{time.strftime('%Y%m%d_%H%M%S')}"
     dest.mkdir(parents=True)
     index = []
+    gone = []
     for x in b.api("GET", "/workflows?limit=250")["data"]:
-        wf = b.api("GET", f"/workflows/{x['id']}")
+        try:
+            wf = b.api("GET", f"/workflows/{x['id']}")
+        except SystemExit as e:                # a short-lived workflow made and removed by another automation can vanish between the list and the fetch
+            if "HTTP 404" not in str(e):
+                raise
+            gone.append(x["name"])
+            continue
         (dest / f"{x['id']}.json").write_text(json.dumps(wf), encoding="utf-8")
         index.append({"id": x["id"], "name": x["name"], "active": x.get("active")})
+    if gone:
+        print("skipped (removed from n8n while the backup ran):", gone)
     (dest / "index.json").write_text(json.dumps(index, indent=1), encoding="utf-8")
     print("saved", len(index), "workflows to", dest)
     for i in index:

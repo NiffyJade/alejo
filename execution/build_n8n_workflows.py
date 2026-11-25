@@ -619,9 +619,10 @@ const h = $input.first().json;                       // { id, slug, name, timezo
 const tz = h.timezone || 'Africa/Lagos', now = new Date();
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(now);                                  // YYYY-MM-DD on the hotel's clock
 const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', hourCycle: 'h23' }).format(now));
+const minute = Number(new Intl.DateTimeFormat('en-GB', { timeZone: tz, minute: '2-digit' }).format(now));
 const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(now));
 const tomorrow = new Date(Date.parse(today + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
-return [{ json: { hotel: { id: h.id, slug: h.slug, name: h.name, timezone: tz, staff_chat_id: h.staff_chat_id }, now: now.toISOString(), today, tomorrow, hour, weekday,
+return [{ json: { hotel: { id: h.id, slug: h.slug, name: h.name, timezone: tz, staff_chat_id: h.staff_chat_id }, now: now.toISOString(), today, tomorrow, hour, mins: hour * 60 + minute, weekday,
   cutoff: new Date(now.getTime() - 30 * 60000).toISOString(),
   followBefore: new Date(now.getTime() - 90 * 60000).toISOString(), followAfter: new Date(now.getTime() - 5 * 3600000).toISOString() } }];
 """, (220, 300))
@@ -777,6 +778,19 @@ return $input.all().filter(i => i.json.id).map(i => ({{ json: {{ booking_id: i.j
     w.link(gi, ri, 0)
     w.chain(ri, ci, ti)
     w.link(ci, mi)
+
+    # J: past checkout time. Thirty minutes after the hotel's checkout time (setting CHECKOUT_TIME, noon when it cannot be read), the staff
+    # group is told ONCE about guests still marked checked in on their checkout day. The stay is stamped (sql/028) only after Telegram took
+    # the message, so a failed send is tried again on the next run and a delivered one never repeats. Nobody is checked out by this.
+    qj = http(w, "Stays due out today, not announced", "GET",
+              "=" + SB + "/bookings?status=eq.checked_in&check_out=eq.{{ $json.today }}&checkout_overdue_alert_sent_at=is.null"
+              "&select=id,room_type,room_number,guests(name)", (900, 3000), always=True)
+    cj = code(w, "Compose overdue alert", booking_js("overdue_compose.js"), (1120, 3000))
+    tj = tg_send(w, "Alert staff (past checkout)", STAFF, "={{ $json.text }}", (1340, 3000), onError="continueErrorOutput")
+    mj = http(w, "Mark checkout alert sent", "PATCH", "=" + SB + "/bookings?id=in.({{ $('Compose overdue alert').first().json.ids.join(',') }})", (1560, 3000),
+              body="={{ JSON.stringify({ checkout_overdue_alert_sent_at: new Date().toISOString() }) }}", prefer="return=minimal")
+    w.chain(ctx, qj, cj, tj)
+    w.link(tj, mj, 0)
 
     # D: service recovery, part 1. A request, complaint or emergency that is still open goes back to the staff group:
     # every 30 minutes (every 10 for an emergency), at most 3 times, and the last one says to tell the duty manager.

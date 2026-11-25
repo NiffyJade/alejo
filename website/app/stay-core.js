@@ -34,6 +34,21 @@
     return { label, state, tag: state === 'now' ? 'Now' : state === 'done' ? 'Done' : '' };
   });
 
+  // The hotel's checkout time as minutes after midnight, read from free text: "12:00 noon", "11am", "2 PM", "midday". Noon when it cannot be read.
+  // (The same reading is in execution/telegram_booking_js/overdue_compose.js, which tells the staff group; both are tested on one table.)
+  const deadlineMinutes = (text) => {
+    const m = /(\d{1,2})(?:[:.](\d{2}))?\s*(a\.?m\.?|p\.?m\.?|noon|midday)?/i.exec(String(text || ''));
+    if (!m) return 720;
+    let h = Number(m[1]); const min = m[2] ? Number(m[2]) : 0, w = (m[3] || '').toLowerCase().replace(/\./g, '');
+    if (w === 'pm' && h < 12) h += 12;
+    if (w === 'am' && h === 12) h = 0;
+    return h > 23 || min > 59 ? 720 : h * 60 + min;
+  };
+  const minutesOf = (hhmm) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(hhmm || '')); return m ? Number(m[1]) * 60 + Number(m[2]) : 0; };
+  const GRACE = 30;                                            // minutes after the checkout time before a guest counts as overdue
+  // a guest still checked in (stage 2 or 3) whose checkout day has passed, or whose checkout time (plus the grace) has passed today
+  const overdue = (b, today, nowMinutes, deadline) => b.stage >= 2 && b.stage < 4 && (b.out < today || (b.out === today && nowMinutes >= deadline + GRACE));
+
   // the row after the selected one, for the arrow keys (stays on the ends)
   const neighbour = (ids, current, delta) => {
     if (!ids.length) return null;
@@ -45,6 +60,6 @@
   // the selection must always be a stay that is on screen: keep it if it still is, else the first one
   const keepSelection = (ids, current) => (ids.includes(current) ? current : ids[0] || null);
 
-  const api = { STEPS, primary, pay, note, steps, neighbour, keepSelection };
+  const api = { STEPS, primary, pay, note, steps, neighbour, keepSelection, deadlineMinutes, minutesOf, overdue, GRACE };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.AlejoStay = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -753,3 +753,10 @@ button.tr:focus-visible { outline: 2px solid var(--ai); outline-offset: -2px; bo
 .side-foot .me { padding-top: 2px; }
 .me > span:last-child { min-width: 0; }
 .me b, .me small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- past checkout time ---------- */
+.tab.od { color: var(--negative); }
+.tab.od[aria-selected="true"] { color: #fff; background: var(--negative); }
+.tab.od[aria-selected="true"] .n { color: rgba(255, 255, 255, 0.85); }
+.sd-note.od { background: var(--negative-soft); color: #5e1710; font-weight: 600; }
+.mrow .pill.od { margin-top: 4px; height: 20px; font-size: 12px; }

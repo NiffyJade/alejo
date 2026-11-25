@@ -402,4 +402,43 @@ ok('a guest chasing an open item is not mistaken for a service request', () => {
   const t = svcTurn('any update?', { intent: 'other', can_answer: false, notify_staff: false }, { open: [ITEM()] });
   assert(t.out.chase);
 });
-console.log(n + ' tests passed (chasing and services included)');
+// ============================================================ past checkout time (Scheduler part J)
+const CTX = (mins, over = {}) => ({ mins, settings: { CHECKOUT_TIME: '12:00 noon', ...over } });
+const STAY = (name, room_type = 'Suite', room_number = null) => ({ id: 'id-' + name, room_type, room_number, guests: { name } });
+const alert = (ctx, rows) => run('overdue_compose.js', { Context: [ctx] }, rows);
+ok('checkout times in free text are read the same way as on the dashboard', () => {
+  // the same table as website/app/stay-core.js: 12:00 noon -> an alert only from 12:30
+  const TIMES = [['12:00 noon', 720], ['12:00 PM', 720], ['12 noon', 720], ['noon', 720], ['midday', 720], ['', 720], [undefined, 720], ['11am', 660], ['11:00 AM', 660], ['11.30 a.m.', 690],
+  ['2pm', 840], ['2:30 PM', 870], ['12:00 AM', 0], ['12:30 PM', 750], ['12:30 AM', 30], ['10:30', 630], ['25:00', 720], ['9:99', 720], ['by 12:00 noon', 720], ['Checkout is 1 PM', 780]];
+  for (const [t, m] of TIMES) {
+    const settings = t === undefined ? {} : { CHECKOUT_TIME: t };
+    assert.strictEqual(alert({ mins: m + 29, settings }, [STAY('A')]).length, 0, `${t}: too early at +29`);
+    assert.strictEqual(alert({ mins: m + 30, settings }, [STAY('A')]).length, 1, `${t}: due at +30`);
+  }
+});
+ok('a guest still checked in 30 minutes after checkout time: one alert naming the guest and the room', () => {
+  const [a] = alert(CTX(750), [STAY('Ada Obi', 'Suite', '302')]);
+  assert(/Past checkout time \(12:00 noon\)/.test(a.text) && /Ada Obi \(Suite, room 302\)/.test(a.text) && /This guest is still marked as checked in/.test(a.text), a.text);
+  assert.deepStrictEqual(a.ids, ['id-Ada Obi']);
+});
+ok('several overdue guests are ONE message (no flood), listing each, with their ids to stamp', () => {
+  const out = alert(CTX(800), [STAY('Ada Obi', 'Suite', '302'), STAY('Bola Eze', 'Deluxe')]);
+  assert.strictEqual(out.length, 1); assert(/Ada Obi.*\n.*Bola Eze \(Deluxe\)/.test(out[0].text) && /These guests are/.test(out[0].text), out[0].text);
+  assert.deepStrictEqual(out[0].ids, ['id-Ada Obi', 'id-Bola Eze']);
+});
+ok('nothing before the checkout time plus 30 minutes, and nothing when nobody is overdue', () => {
+  assert.strictEqual(alert(CTX(749), [STAY('A')]).length, 0);
+  assert.strictEqual(alert(CTX(900), []).length, 0);
+  assert.strictEqual(alert(CTX(900), [{}, { id: null }]).length, 0);
+});
+ok('an 11am hotel is told from 11:30, and a hotel with no readable time is treated as noon', () => {
+  assert.strictEqual(alert(CTX(689, { CHECKOUT_TIME: '11am' }), [STAY('A')]).length, 0);
+  assert.strictEqual(alert(CTX(690, { CHECKOUT_TIME: '11am' }), [STAY('A')]).length, 1);
+  assert.strictEqual(alert(CTX(749, { CHECKOUT_TIME: '' }), [STAY('A')]).length, 0);
+  assert(/\(midday\)/.test(alert(CTX(750, { CHECKOUT_TIME: '' }), [STAY('A')])[0].text));
+});
+ok('a booking with no guest name or room still produces a sensible line', () => {
+  const [a] = alert(CTX(750), [{ id: 'x' }]);
+  assert(/A guest \(room\)/.test(a.text), a.text);
+});
+console.log(n + ' tests passed (chasing, services and past-checkout alerts included)');

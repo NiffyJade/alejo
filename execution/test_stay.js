@@ -48,5 +48,22 @@ eq('the selection stays when it is still listed', S.keepSelection(ids, 'b'), 'b'
 eq('a filtered-out selection falls back to the first listed stay', S.keepSelection(['x', 'y'], 'b'), 'x');
 eq('nothing listed means nothing selected', S.keepSelection([], 'b'), null);
 
+// the hotel's checkout time, read from free text (the same table is used on the bot's side)
+const TIMES = [['12:00 noon', 720], ['12:00 PM', 720], ['12 noon', 720], ['noon', 720], ['midday', 720], ['', 720], [undefined, 720], ['11am', 660], ['11:00 AM', 660], ['11.30 a.m.', 690],
+  ['2pm', 840], ['2:30 PM', 870], ['12:00 AM', 0], ['12:30 PM', 750], ['12:30 AM', 30], ['10:30', 630], ['25:00', 720], ['9:99', 720], ['by 12:00 noon', 720], ['Checkout is 1 PM', 780]];
+eq('checkout times in free text are read correctly', TIMES.map(([t]) => S.deadlineMinutes(t)), TIMES.map(([, m]) => m));
+eq('"HH:MM" from the dashboard clock becomes minutes', [S.minutesOf('12:30'), S.minutesOf('02:05'), S.minutesOf(''), S.minutesOf('x')], [750, 125, 0, 0]);
+
+// who is overdue: checked in and past the checkout time (plus 30 minutes), or still checked in after the checkout day
+const OD = (o, now, deadline = 720, today = T) => S.overdue(stay(o), today, now, deadline);
+eq('not overdue until 30 minutes after the checkout time (12:29 no, 12:30 yes)', [OD({ stage: 2, out: T }, 749), OD({ stage: 2, out: T }, 750)], [false, true]);
+eq('a guest who was sent the checkout reminder (stage 3) is overdue too', OD({ stage: 3, out: T }, 800), true);
+eq('a stay that has not checked in is never "overdue for checkout"', [OD({ stage: 0, out: T }, 900), OD({ stage: 1, out: T }, 900)], [false, false]);
+eq('a guest already checked out or thanked is not overdue', [OD({ stage: 4, out: T }, 900), OD({ stage: 5, out: T }, 900)], [false, false]);
+eq('still checked in after the checkout DAY is overdue at any time of day', OD({ stage: 2, out: '2026-11-23' }, 60), true);
+eq('leaving tomorrow is not overdue', OD({ stage: 2, out: '2026-11-25' }, 900), false);
+eq('an 11am hotel flags at 11:30, not before', [OD({ stage: 2, out: T }, 689, 660), OD({ stage: 2, out: T }, 690, 660)], [false, true]);
+eq('the grace is 30 minutes', S.GRACE, 30);
+
 console.log(`\n${n - fails}/${n} passed`);
 process.exit(fails ? 1 : 0);
