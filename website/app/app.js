@@ -600,6 +600,24 @@
       dgH.addEventListener('change', () => { if (!LIVE) return; dgSave('DAILY_DIGEST_HOUR', dgH.value, 'The daily summary will be sent at ' + dgH.options[dgH.selectedIndex].text + '.'); });
       dgPaint();
     }
+    // Booking.com: the setting BOOKINGCOM_SYNC that the scheduler reads (sql/031, part K). Off by default.
+    const bdT = $('#bdctoggle');
+    if (bdT) {
+      const bdOn = () => ['yes', 'on', 'true'].includes(String((window.FD_FACTS || {}).BOOKINGCOM_SYNC || 'no').toLowerCase());
+      const bdPaint = () => { bdT.setAttribute('aria-checked', String(bdOn())); bdT.disabled = !LIVE; $('#bdcstate').textContent = LIVE ? (bdOn() ? 'On' : 'Off') : 'Off (sample)'; };
+      bdT.addEventListener('click', async () => {
+        if (!LIVE) return;
+        const want = bdOn() ? 'no' : 'yes'; bdT.disabled = true;
+        try {
+          await window.Alejo.saveFact('BOOKINGCOM_SYNC', want);
+          window.FD_FACTS = Object.assign(window.FD_FACTS || {}, { BOOKINGCOM_SYNC: want });
+          await window.Alejo.refresh();
+          $('#bdcstatus').textContent = want === 'yes' ? 'On. Within 15 minutes the staff group gets a first message with tonight\'s free rooms.' : 'Off. Alejo no longer sends Booking.com counts.';
+        } catch (e) { $('#bdcstatus').textContent = /row-level|permission|violates/i.test(e.message) ? 'Only a manager or the owner can change this.' : (e.message || 'Could not save that.'); }
+        bdPaint();
+      });
+      bdPaint();
+    }
     // the Hotel panel is real: the name and times Alejo gives guests are the settings HOTEL_NAME, CHECKIN_TIME and CHECKOUT_TIME
     // (the bot, the reminders and the past-checkout alert read them). The time zone is the hotel's own and only Alejo changes it.
     const hn = $('#hn'), ci = $('#ci'), co = $('#co'), tz = $('#tz'), hs = $('#hotelSave'), hnote = $('#hotelNote');

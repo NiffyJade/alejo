@@ -792,6 +792,17 @@ return $input.all().filter(i => i.json.id).map(i => ({{ json: {{ booking_id: i.j
     w.chain(ctx, qj, cj, tj)
     w.link(tj, mj, 0)
 
+    # K: Booking.com room counts (sql/031). When the hotel has switched it on (setting BOOKINGCOM_SYNC), ota_check lists the room types
+    # and nights whose free count no longer matches what Booking.com was last told; the staff group gets the exact numbers to set. Only
+    # after Telegram took the message are those counts marked as told, so a failed send is repeated on the next run.
+    qk = http(w, "Booking.com counts to change", "POST", "=" + SB + "/rpc/ota_check", (900, 3300), body="={{ JSON.stringify({}) }}", always=True)
+    ck = code(w, "Compose Booking.com update", booking_js("ota_compose.js"), (1120, 3300))
+    tk = tg_send(w, "Tell staff (Booking.com counts)", STAFF, "={{ $json.text }}", (1340, 3300), onError="continueErrorOutput")
+    mk = http(w, "Mark Booking.com counts told", "POST", "=" + SB + "/rpc/ota_mark", (1560, 3300),
+              body="={{ JSON.stringify({ p_items: $('Compose Booking.com update').first().json.items }) }}")
+    w.chain(ctx, qk, ck, tk)
+    w.link(tk, mk, 0)
+
     # D: service recovery, part 1. A request, complaint or emergency that is still open goes back to the staff group:
     # every 30 minutes (every 10 for an emergency), at most 3 times, and the last one says to tell the duty manager.
     qd = http(w, "Open service items", "GET",

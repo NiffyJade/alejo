@@ -63,6 +63,12 @@
         <div class="f f-gap"><label for="dghour">Send it at</label><select id="dghour" name="digest_hour"><option value="6">6:00 AM</option><option value="7">7:00 AM</option><option value="8">8:00 AM</option><option value="9">9:00 AM</option><option value="10">10:00 AM</option></select><p class="help" id="dghelp">Lagos time. If a time was missed (for example the system was down), it is still sent within the next three hours.</p></div>
         <p class="sr" id="dgstatus" role="status" aria-live="polite"></p>
       </div></section>
+    <section class="sset" aria-labelledby="s8"><div><h2 id="s8">Booking.com</h2><p class="d">For hotels that also sell rooms on Booking.com and set the room counts there by hand.</p></div>
+      <div class="panel">
+        <div class="srow"><div><div class="t">Tell staff what to change on Booking.com <span class="pill" id="bdcstate"></span></div><p class="d">Whenever a booking, cancellation or blocked room changes how many rooms are free, Alejo sends the staff group the exact numbers to set on Booking.com, for example "Standard, Fri 28 Nov: 2 rooms". When a booking comes from Booking.com, add it here with the source Booking.com: Alejo then knows Booking.com already counted it and asks for nothing.</p></div>
+          <button class="tog" id="bdctoggle" data-live type="button" role="switch" aria-checked="false" aria-label="Tell staff what to change on Booking.com"></button></div>
+        <p class="sr" id="bdcstatus" role="status" aria-live="polite"></p>
+      </div></section>
     <section class="sset" aria-labelledby="s4"><div><h2 id="s4">Voice and languages</h2><p class="d">How the phone line sounds and what it does with callers it cannot follow.</p></div>
       <div class="panel">
         <div class="f"><label for="vl">Voice</label><select id="vl" name="voice"><option>Nigerian English, female</option></select><p class="help">Understands Nigerian English and Pidgin, and Yoruba-accented English.</p></div>

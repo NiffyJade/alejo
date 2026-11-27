@@ -100,7 +100,7 @@
     return s + Math.round(a);
   };
   const METHOD = { cash: 'Cash', transfer: 'Bank transfer', 'bank transfer': 'Bank transfer', pos: 'POS (card)', card: 'Card', 'not recorded': 'Method not recorded', 'recorded at booking': 'Paid at booking' };
-  const SOURCE = { telegram: 'Telegram (Alejo)', phone: 'Phone call', 'walk-in': 'Walk-in', online: 'Online', other: 'Other or not set' };
+  const SOURCE = { telegram: 'Telegram (Alejo)', phone: 'Phone call', 'walk-in': 'Walk-in', 'booking.com': 'Booking.com', online: 'Online', other: 'Other or not set' };
   const cap = (s) => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
   const methodName = (m) => METHOD[String(m || '').toLowerCase()] || cap(m);
   const sourceName = (s) => SOURCE[String(s || '').toLowerCase()] || cap(s);

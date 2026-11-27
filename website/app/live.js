@@ -107,8 +107,8 @@
     const RATES = Object.fromEntries(rows.rooms.map((r) => [r.name, Number(r.nightly_rate) || 0]));
     const guests = Object.fromEntries(rows.guests.map((g) => [g.id, g]));
 
-    const SRC = { telegram: 'Telegram', phone: 'Phone', 'walk-in': 'Walk-in', online: 'Online', other: 'Other' };
-    const HOW = (b) => ({ 'walk-in': 'at the desk', online: 'online', other: 'by staff' }[b.source] || 'by phone');
+    const SRC = { telegram: 'Telegram', phone: 'Phone', 'walk-in': 'Walk-in', 'booking.com': 'Booking.com', online: 'Online', other: 'Other' };
+    const HOW = (b) => ({ 'walk-in': 'at the desk', 'booking.com': 'on Booking.com', online: 'online', other: 'by staff' }[b.source] || 'by phone');
     const paidBy = {};
     (rows.payments || []).forEach((p) => { (paidBy[p.booking_id] = paidBy[p.booking_id] || []).push({ id: p.id, amount: Number(p.amount), method: p.method || '', note: p.note || '', at: p.created_at }); });
     const bookings = rows.bookings.filter((b) => b.status !== 'cancelled' && guests[b.guest_id]).map((b) => {

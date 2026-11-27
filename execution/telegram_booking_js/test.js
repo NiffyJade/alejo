@@ -441,4 +441,39 @@ ok('a booking with no guest name or room still produces a sensible line', () => 
   const [a] = alert(CTX(750), [{ id: 'x' }]);
   assert(/A guest \(room\)/.test(a.text), a.text);
 });
-console.log(n + ' tests passed (chasing, services and past-checkout alerts included)');
+
+// ---------------------------------------------------------------- Booking.com room counts (Scheduler part K, ota_compose.js)
+const bdc = (r) => run('ota_compose.js', {}, [r]);
+const C = (room_type, night, rooms) => ({ room_type, night, rooms, was: rooms + 1 });
+ok('Booking.com: switched off says nothing', () => { assert.strictEqual(bdc({ enabled: false, changes: [] }).length, 0); });
+ok('Booking.com: nothing changed says nothing', () => { assert.strictEqual(bdc({ enabled: true, first: false, changes: [] }).length, 0); });
+ok('Booking.com: switching on sends one start message with tonight\'s counts, and marks nothing', () => {
+  const [m] = bdc({ enabled: true, first: true, changes: [], tonight: [{ room_type: 'Standard', rooms: 6 }, { room_type: 'Suite', rooms: 0 }] });
+  assert(/room counts: on/.test(m.text) && /Standard: 6 rooms/.test(m.text) && /Suite: 0 rooms \(close it\)/.test(m.text), m.text);
+  assert(/source "Booking.com"/.test(m.text), 'tells staff how to record Booking.com bookings');
+  assert.deepStrictEqual(m.items, []);
+});
+ok('Booking.com: nights in a row with the same count become one line', () => {
+  const [m] = bdc({ enabled: true, first: false, changes: [C('Standard', '2026-11-28', 3), C('Standard', '2026-11-29', 3), C('Standard', '2026-11-30', 3), C('Standard', '2026-12-01', 3)] });
+  assert(/• Standard, Sat 28 Nov – Tue 1 Dec: 3 rooms/.test(m.text), m.text);
+  assert.strictEqual(m.items.length, 4, 'all four nights are marked as told');
+});
+ok('Booking.com: a gap or a different count starts a new line; room types are kept apart', () => {
+  const [m] = bdc({ enabled: true, first: false, changes: [C('Suite', '2026-11-28', 0), C('Standard', '2026-11-28', 2), C('Standard', '2026-11-29', 1), C('Standard', '2026-12-03', 1)] });
+  const lines = m.text.split('\n').filter((l) => l.startsWith('•'));
+  assert.deepStrictEqual(lines, ['• Standard, Sat 28 Nov: 2 rooms', '• Standard, Sun 29 Nov: 1 room', '• Standard, Thu 3 Dec: 1 room', '• Suite, Sat 28 Nov: 0 rooms (close it)']);
+});
+ok('Booking.com: a long list is cut at 25 lines and only what was shown is marked told', () => {
+  const many = []; for (let i = 0; i < 30; i++) many.push(C('Standard', new Date(Date.UTC(2026, 10, 1 + 2 * i)).toISOString().slice(0, 10), 2));   // every other night: 30 separate lines
+  const [m] = bdc({ enabled: true, first: false, changes: many });
+  assert.strictEqual(m.text.split('\n').filter((l) => l.startsWith('•')).length, 25);
+  assert(/and 5 more, in the next message/.test(m.text), m.text);
+  assert.strictEqual(m.items.length, 25, 'the 5 not shown stay untold, so the next run sends them');
+});
+ok('Booking.com: dates from the database with a time part are read as the night', () => {
+  const [m] = bdc({ enabled: true, first: false, changes: [{ room_type: 'Deluxe', night: '2026-11-28T00:00:00', rooms: 4, was: 5 }] });
+  assert(/Deluxe, Sat 28 Nov: 4 rooms/.test(m.text), m.text);
+  assert.deepStrictEqual(m.items, [{ room_type: 'Deluxe', night: '2026-11-28', rooms: 4 }]);
+});
+
+console.log(n + ' tests passed (chasing, services, past-checkout alerts and Booking.com counts included)');

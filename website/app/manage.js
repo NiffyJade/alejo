@@ -71,7 +71,7 @@
       type: select(FD.roomTypes.map((r) => [r.name, `${r.name} (${FD.naira(r.rate)} a night)`])),
       ci: input({ type: 'date', required: true, min: t0, value: t0 }),
       co: input({ type: 'date', required: true, min: t0, value: addDays(t0, 1) }),
-      source: select([['walk-in', 'Walk-in'], ['phone', 'Phone call'], ['online', 'Online or another platform'], ['other', 'Other']]),
+      source: select([['walk-in', 'Walk-in'], ['phone', 'Phone call'], ['booking.com', 'Booking.com'], ['online', 'Online or another platform'], ['other', 'Other']]),
       room: input({ type: 'text', maxlength: 20, autocomplete: 'off', placeholder: 'Optional, for example 204' }),
       now: h('input', { type: 'checkbox' }),
       paid: input({ type: 'number', min: '0', step: '100', placeholder: '0', inputmode: 'numeric' }),
@@ -143,7 +143,7 @@
       amount: input({ type: 'number', min: '0', step: '100', inputmode: 'numeric' }),
       paid: input({ type: 'number', min: '0', step: '100', placeholder: '0', inputmode: 'numeric' }),
       method: select(METHODS),
-      source: select([['walk-in', 'Walk-in'], ['phone', 'Phone call'], ['online', 'Online or another platform'], ['other', 'Other']]),
+      source: select([['walk-in', 'Walk-in'], ['phone', 'Phone call'], ['booking.com', 'Booking.com'], ['online', 'Online or another platform'], ['other', 'Other']]),
       notes: input({ type: 'text', maxlength: 300, autocomplete: 'off', placeholder: 'Optional, for example the type of event' }),
     };
     let touched = false;                                              // once staff type their own amount, the price stops overwriting it
