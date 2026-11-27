@@ -281,7 +281,7 @@
 
   /* ---------- the public object app.js uses ---------- */
   const RANK = { staff: 1, manager: 2, owner: 3, admin: 4 };
-  const NEEDS = { enquiries: 'manager', ratings: 'manager', facts: 'manager', settings: 'manager', team: 'owner', earnings: 'owner' };   // each restricted page and the lowest role that may open it
+  const NEEDS = { enquiries: 'manager', ratings: 'manager', facts: 'manager', settings: 'manager', team: 'owner', earnings: 'owner', hotels: 'admin' };   // each restricted page and the lowest role that may open it
   // Earnings: the owner, or a manager once the owner has switched it on for managers (the database checks the same rule: can_see_earnings)
   const seesEarnings = async () => Alejo.can('owner') || (Alejo.can('manager') && (await rest('rpc/can_see_earnings', { method: 'POST', body: JSON.stringify({ p_hotel: HOTEL.id }) }).catch(() => false)) === true);
   const Alejo = {
@@ -334,6 +334,10 @@
     earningsForManagers: async () => { const r = await rest('hotels?select=earnings_for_managers&id=eq.' + HOTEL.id).catch(() => null); return !!(r && r[0] && r[0].earnings_for_managers); },
     setEarningsForManagers: (on) => rest('rpc/owner_set_earnings_access', { method: 'POST', body: JSON.stringify({ p_hotel: HOTEL.id, p_on: !!on }) }),
     hotel: () => HOTEL, hotels: () => HOTELS, retryable, keepTrying,
+    // Alejo's own admins (sql/030): every hotel with its on/off switch; the database refuses anyone else
+    adminHotels: () => rest('rpc/admin_hotels', { method: 'POST', body: '{}' }),
+    setHotelActive: (id, on) => rest('rpc/admin_set_hotel_active', { method: 'POST', body: JSON.stringify({ p_hotel: id, p_on: !!on }) }),
+    openHotel: (id) => { try { localStorage.setItem(HKEY, id); } catch (e) { /* private mode */ } location.href = '/app/index.html'; },
     async ask(question) {                                           // the staff copilot: answers from the hotel's live records (edge function staff-copilot)
       const t = await token();
       const r = await fetch(SB + '/functions/v1/staff-copilot', { method: 'POST', headers: { apikey: ANON, authorization: 'Bearer ' + t, 'content-type': 'application/json' }, body: JSON.stringify({ question, hotel_id: HOTEL.id }) });
@@ -423,16 +427,25 @@
         if (role) role.textContent = Alejo.me.role === 'admin' ? 'Alejo admin' : Alejo.me.role.charAt(0).toUpperCase() + Alejo.me.role.slice(1);
       }
       document.querySelectorAll('.nav a').forEach((a) => {          // links to pages this role cannot open leave the menu
-        const m = (a.getAttribute('href') || '').match(/\/(enquiries|ratings|knowledge|settings|team|earnings)\.html/);
-        if (m && (m[1] === 'earnings' ? !Alejo.seeEarnings : !Alejo.can(m[1] === 'team' ? 'owner' : 'manager'))) a.remove();
+        const m = (a.getAttribute('href') || '').match(/\/(enquiries|ratings|knowledge|settings|team|earnings|hotels)\.html/);
+        if (m && (m[1] === 'earnings' ? !Alejo.seeEarnings : m[1] === 'hotels' ? !Alejo.can('admin') : !Alejo.can(m[1] === 'team' ? 'owner' : 'manager'))) a.remove();
       });
+      const nav = document.querySelector('.nav');
+      if (nav && Alejo.can('admin') && !nav.querySelector('a[href="/app/hotels.html"]')) {   // Alejo's admins get every hotel's switch, under its own heading
+        const hd = document.createElement('p'), a = document.createElement('a');
+        hd.className = 'nav-h'; hd.textContent = 'Alejo admin'; a.href = '/app/hotels.html'; a.textContent = 'Hotels';
+        nav.append(hd, a);
+      }
+      if (!Alejo.can('admin')) document.querySelectorAll('.nav .nav-h.admin-h').forEach((x) => x.remove());
       if (!Alejo.can('manager')) { const hd = document.querySelector('.nav .nav-h'); if (hd) hd.remove(); }
       if (Alejo.denied) {                                           // landing on one anyway explains why, instead of an empty or failing page
         const main = document.getElementById('main');
         if (main) {
           const box = document.createElement('div'), t = document.createElement('h1'), p = document.createElement('p');
-          box.className = 'title-row'; t.textContent = Alejo.deniedFor === 'owner' ? 'This page is for the hotel owner' : 'This page is for managers'; p.className = 'sub';
-          p.textContent = 'Your account cannot open this page. Ask ' + (Alejo.deniedFor === 'owner' ? 'the owner' : 'a manager or the owner') + ' if you need something changed here.';
+          box.className = 'title-row'; p.className = 'sub';
+          t.textContent = Alejo.deniedFor === 'admin' ? 'This page is for Alejo admins' : Alejo.deniedFor === 'owner' ? 'This page is for the hotel owner' : 'This page is for managers';
+          p.textContent = Alejo.deniedFor === 'admin' ? 'It lists every hotel on Alejo, so only the Alejo team can open it.'
+            : 'Your account cannot open this page. Ask ' + (Alejo.deniedFor === 'owner' ? 'the owner' : 'a manager or the owner') + ' if you need something changed here.';
           const d = document.createElement('div'); d.append(t, p); box.append(d); main.replaceChildren(box);
         }
       }

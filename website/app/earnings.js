@@ -227,6 +227,18 @@
   let rz = null;
   new ResizeObserver(() => { clearTimeout(rz); rz = setTimeout(drawChart, 80); }).observe($('#erChart'));
 
+  /* the title row (on phones just the period buttons) stays under the top bar: a rule appears under it once the page scrolls under it,
+     and jumps such as "See who" stop below it */
+  const pinned = () => (getComputedStyle($('.er-title')).display === 'contents' ? $('.er-period') : $('.er-title'));
+  const onScroll = () => {
+    const pin = pinned(), top = ($('.top') || { offsetHeight: 0 }).offsetHeight;
+    pin.classList.toggle('stuck', window.scrollY > 0 && pin.getBoundingClientRect().top <= top + 1);
+    document.documentElement.style.scrollPaddingTop = Math.round(top + pin.offsetHeight + 12) + 'px';
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  new ResizeObserver(onScroll).observe($('.er-period'));
+
   /* ---------- who can see this page (the owner's switch) ---------- */
   const access = async () => {
     const isOwner = LIVE ? A.can('owner') : true;

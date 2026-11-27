@@ -18,7 +18,8 @@ if OUT.exists():
     shutil.rmtree(OUT)
 OUT.mkdir(parents=True)
 
-for name in ("index.html", "site.css", "site.js"):
+# the tab and home-screen icons (made by execution/make_icons.py) live at the site root, where browsers look for them
+for name in ("index.html", "site.css", "site.js", "favicon.svg", "favicon-32.png", "favicon.ico", "apple-touch-icon.png"):
     shutil.copy2(SRC / name, OUT / name)
 shutil.copytree(SRC / "app", OUT / "app")
 

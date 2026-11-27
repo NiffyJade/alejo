@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Settings · Alejo staff dashboard</title>
 <meta name="robots" content="noindex">
@@ -17,7 +20,7 @@
 <a class="skip" href="#main">Skip to content</a>
 <div class="app">
 <aside class="side" id="side" aria-label="Dashboard">
-  <a class="brand" href="/app/index.html" aria-label="Alejo, today"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0z" fill="#111"/><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="#111"/><circle cx="12" cy="6.2" r="2" fill="#1a4be0"/></svg><span class="brand-t"><b translate="no">Alejo</b></span></a>
+  <a class="brand" href="/app/index.html" aria-label="Alejo, today"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0z" fill="#111"/><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="#111"/><circle cx="12" cy="6.2" r="2" fill="#16a34a"/></svg><span class="brand-t"><b translate="no">Alejo</b></span></a>
   <div class="scope"><b>BrightSide Hotel</b><span>Lagos, Nigeria</span></div>
   <nav class="nav" aria-label="Pages"><a href="/app/index.html">Today</a><a href="/app/inbox.html">Inbox <i class="cnt" id="needCount" role="img" aria-label="guests need you">3</i></a><a href="/app/enquiries.html">Enquiries</a><a href="/app/ratings.html">Ratings</a><a href="/app/bookings.html">Bookings</a><a href="/app/calendar.html">Calendar</a><p class="nav-h">Your hotel</p><a href="/app/earnings.html">Earnings</a><a href="/app/knowledge.html">Facts</a><a href="/app/settings.html" aria-current="page">Settings</a><a href="/app/team.html">Team</a></nav>
   <div class="side-foot">
@@ -36,10 +39,10 @@
 <main class="sheet" id="main">
   <div class="title-row"><div><h1>Settings</h1><p class="sub">How Alejo works for BrightSide Hotel.</p></div></div>
   <div class="sets">
-    <section class="sset" aria-labelledby="s1"><div><h2 id="s1">Hotel</h2><p class="d">The times guests are told, in Lagos time.</p></div>
+    <section class="sset" aria-labelledby="s1"><div><h2 id="s1">Hotel</h2><p class="d" id="hotelDesc">The name and times Alejo gives guests, in Lagos time.</p></div>
       <div class="panel"><div class="two"><div class="f"><label for="hn">Hotel name</label><input id="hn" name="hotel_name" autocomplete="off" value="BrightSide Hotel"></div><div class="f"><label for="tz">Time zone</label><select id="tz" name="time_zone"><option>Africa/Lagos (WAT)</option></select></div></div>
         <div class="two f f-gap"><div class="f"><label for="ci">Check-in from</label><input id="ci" name="check_in" autocomplete="off" value="2:00 PM"></div><div class="f"><label for="co">Checkout by</label><input id="co" name="checkout" autocomplete="off" value="12:00 noon"></div></div>
-        <p class="p-gap"><button class="btn small" type="button" data-save>Save</button></p></div></section>
+        <p class="p-gap"><button class="btn small" type="button" id="hotelSave">Save</button></p><p class="d" id="hotelNote" role="status" aria-live="polite"></p></div></section>
     <section class="sset" id="svcSettings" aria-labelledby="s7" hidden><div><h2 id="s7">Services you sell</h2><p class="d">The event hall, gym, pool and anything else guests can book besides a room. Each appears in New booking with the price you set here.</p></div>
       <div class="panel"><div id="svcList" data-skel="rows:3"></div><p class="p-gap"><button class="btn small" type="button" id="svcAdd">Add a service</button></p><p class="sr" id="svcstatus" role="status" aria-live="polite"></p></div></section>
     <section class="sset" aria-labelledby="s2"><div><h2 id="s2">Channels</h2><p class="d">Where guests reach you. Replies from staff go back through the same channel.</p></div>

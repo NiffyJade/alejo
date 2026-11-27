@@ -21,6 +21,15 @@
   const initials = (n) => n.split(' ').map((p) => p[0]).slice(0, 2).join('');
   const disc = (name, hue, cls) => h('span', { class: 'disc' + (cls ? ' ' + cls : ''), style: `--h:${hue}`, 'aria-hidden': 'true', text: initials(name) });
 
+  /* ---------- pinned bars (class "pin"): they stay under the top bar; on phones a bar may pin only its "pin-target" ---------- */
+  const pinned = () => $$('.pin').map((el) => (getComputedStyle(el).display === 'contents' ? el.querySelector('.pin-target') : el)).filter(Boolean);
+  const onPinScroll = () => {
+    const bar = ($('.top') || { offsetHeight: 0 }).offsetHeight, list = pinned();
+    list.forEach((el) => el.classList.toggle('stuck', window.scrollY > 0 && el.getBoundingClientRect().top <= bar + 1));
+    if (list.length) document.documentElement.style.scrollPaddingTop = Math.round(bar + list[0].offsetHeight + 12) + 'px';
+  };
+  if (document.querySelector('.pin')) { window.addEventListener('scroll', onPinScroll, { passive: true }); window.addEventListener('resize', onPinScroll); onPinScroll(); }
+
   /* ---------- state kept for the session so the screens agree with each other ---------- */
   let S = { resolved: [], facts: {}, added: [], sent: {}, removed: [] };
   if (!LIVE) { try { S = Object.assign(S, JSON.parse(sessionStorage.getItem('fd-demo') || '{}')); } catch (e) { /* private mode: fine */ } }
@@ -590,6 +599,41 @@
       dgT.addEventListener('click', () => { if (!LIVE) return; dgT.disabled = true; dgSave('DAILY_DIGEST', dgOn() ? 'no' : 'yes', dgOn() ? 'The daily summary is off.' : 'The daily summary is on.'); });
       dgH.addEventListener('change', () => { if (!LIVE) return; dgSave('DAILY_DIGEST_HOUR', dgH.value, 'The daily summary will be sent at ' + dgH.options[dgH.selectedIndex].text + '.'); });
       dgPaint();
+    }
+    // the Hotel panel is real: the name and times Alejo gives guests are the settings HOTEL_NAME, CHECKIN_TIME and CHECKOUT_TIME
+    // (the bot, the reminders and the past-checkout alert read them). The time zone is the hotel's own and only Alejo changes it.
+    const hn = $('#hn'), ci = $('#ci'), co = $('#co'), tz = $('#tz'), hs = $('#hotelSave'), hnote = $('#hotelNote');
+    if (hn && ci && co && hs && hnote) {
+      const fact = (k) => String((window.FD_FACTS || {})[k] || '').trim();
+      const hotel = LIVE && window.Alejo.hotel ? window.Alejo.hotel() : null;
+      const paintHotel = () => {
+        if (!LIVE) return;                                          // the public sample keeps its sample values
+        hn.value = fact('HOTEL_NAME') || (hotel && hotel.name) || '';
+        ci.value = fact('CHECKIN_TIME'); co.value = fact('CHECKOUT_TIME');
+        ci.placeholder = 'Not set: guests hear "the afternoon"'; co.placeholder = 'Not set: guests hear "midday"';
+        if (tz && hotel) { tz.replaceChildren(h('option', { text: hotel.timezone || 'Africa/Lagos' })); tz.disabled = true; tz.title = 'Set by Alejo. Ask us if the hotel is in another time zone.'; }
+        const city = String((hotel && hotel.timezone) || 'Africa/Lagos').replace(/^.*\//, '').replace(/_/g, ' ');
+        $('#hotelDesc').textContent = `The name and times Alejo gives guests, in ${city} time.`;
+      };
+      paintHotel();
+      hs.addEventListener('click', async () => {
+        const want = { HOTEL_NAME: hn.value.trim(), CHECKIN_TIME: ci.value.trim(), CHECKOUT_TIME: co.value.trim() };
+        if (!want.HOTEL_NAME) { hnote.textContent = 'The hotel needs a name.'; hn.focus(); return; }
+        for (const [k, el] of [['CHECKIN_TIME', ci], ['CHECKOUT_TIME', co]]) {
+          if (want[k] && !/\d|noon|midday/i.test(want[k])) { hnote.textContent = 'Write the time with a number, for example 2:00 PM or 12:00 noon.'; el.focus(); return; }
+        }
+        if (!LIVE) { hnote.textContent = 'Saved (sample: sign in to change your hotel).'; return; }
+        const changed = Object.entries(want).filter(([k, v]) => v !== fact(k));
+        if (!changed.length) { hnote.textContent = 'Nothing changed.'; return; }
+        hs.disabled = true; hnote.textContent = 'Saving…';
+        try {
+          for (const [k, v] of changed) await window.Alejo.saveFact(k, v);
+          window.FD_FACTS = Object.assign(window.FD_FACTS || {}, Object.fromEntries(changed));   // shown at once, even if a refresh is already running
+          await window.Alejo.refresh(); paintHotel();
+          hnote.textContent = 'Saved. Alejo uses the new details from the next message.';
+        } catch (e) { hnote.textContent = /row-level|permission|violates/i.test(e.message) ? 'Only a manager or the owner can change these.' : (e.message || 'Could not save that.'); }
+        finally { hs.disabled = false; }
+      });
     }
     const used = 212, included = 400, extra = Math.max(0, used - included), rate = 80, base = 150000;
     $('#u-used').textContent = String(used); $('#u-left').textContent = String(Math.max(0, included - used));

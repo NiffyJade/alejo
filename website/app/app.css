@@ -10,6 +10,7 @@
    Everything below this block still works from the same tokens; the v3 overrides at the end of the file only change shape and colour, never layout logic. */
 :root {
   --ink: #14172b;                   /* sidebar, primary buttons, selected tab */
+  --brand-green: #16a34a;           /* the dot in Alejo's bell mark */
   --lime: #d6f26c;                  /* "you are here", what needs a person now */
   --lime-soft: #eef8c8;
   --lime-ink: #3a5300;              /* text on lime-soft */
@@ -59,9 +60,9 @@ a { color: inherit; text-decoration: none; }
 .brand { display: flex; align-items: center; gap: 10px; padding: 2px 10px 0; }
 .mark { width: 28px; height: 28px; flex: none; }
 .side .mark path, .side .mark rect { fill: #fff; }                        /* the logo is drawn in #111 in the markup; on the ink sidebar it is white */
-.side .mark circle { fill: var(--lime); }
+.side .mark circle { fill: var(--brand-green); }               /* the logo's dot is Alejo green everywhere (and in the tab icon) */
 .login .mark path, .login .mark rect { fill: var(--ink); }
-.login .mark circle { fill: var(--ai); }
+.login .mark circle { fill: var(--brand-green); }
 .brand-t { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
 .brand-t b { font: 800 22px/1 var(--display); letter-spacing: -0.02em; }
 .scope { margin: 18px 0 14px; padding: 12px 14px; border-radius: 18px; background: rgba(255, 255, 255, 0.08); border: 0; font-size: 13px; line-height: 18px; }
@@ -1012,4 +1013,73 @@ button.tr:focus-visible { outline: 2px solid var(--ai); outline-offset: -2px; bo
   #main .btn { height: auto; min-height: 44px; min-width: 44px; }
   #main input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), #main select { min-height: 44px; }
   #main a.pill { min-height: 44px; }
+}
+/* the top bar (search, Live pill; Menu on phones) stays at the top; the page scrolls under it */
+:root { --topbar: 68px; }
+@media (max-width: 820px) { :root { --topbar: 60px; } }
+.top { position: sticky; top: 0; z-index: 20; background: var(--frame); }
+html { scroll-padding-top: calc(var(--topbar) + 12px); }             /* "See who" and other jumps land below the bar, not under it */
+.bk-detail { top: calc(var(--topbar) + 12px); max-height: calc(100svh - var(--topbar) - 24px); }
+/* Earnings: the title row and its period buttons stay under the top bar while the figures scroll under them */
+.er-period .sh { display: none; }
+.er-title { position: sticky; top: var(--topbar); z-index: 15; margin: -12px -32px 8px; padding: 12px 32px; background: var(--sheet); transition: box-shadow 150ms ease; }
+.er-title.stuck, .er-period.stuck { box-shadow: 0 1px 0 var(--edge); }
+@media (max-width: 820px) {
+  /* a phone keeps only the period buttons pinned, on one row with short names; the title scrolls away */
+  .er-title { display: contents; }
+  .er-period { position: sticky; top: var(--topbar); z-index: 15; margin: 12px -16px 12px; padding: 8px 16px; background: var(--sheet); transition: box-shadow 150ms ease; }
+  .er-period .tabs { flex-wrap: nowrap; overflow-x: auto; border-radius: 999px; }
+  .er-period .tab { flex: 1 0 auto; padding: 0 12px; }
+  .er-period .lg { display: none; }
+  .er-period .sh { display: inline; }
+}
+@media (max-width: 820px) {
+  .er-period { width: auto; max-width: none; }                      /* runs to the page edges (the negative margins), not 32px short */
+  .er-period .tabs { width: 100%; }
+}
+@media (max-width: 420px) {
+  .er-period .tabs { gap: 2px; }
+  .er-period .tab { padding: 0 8px; font-size: 13px; }
+}
+
+/* ---------- Alejo admin: Hotels (every hotel, its switch, what it still needs) ---------- */
+.ho-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 20px; }
+.ho-card { display: flex; flex-direction: column; gap: 16px; padding: 22px 24px 18px; border-radius: 24px; background: var(--sheet); box-shadow: inset 0 0 0 1.5px var(--edge); }
+.ho-card.off { background: var(--raised); box-shadow: none; }
+.ho-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.ho-id { min-width: 0; }
+.ho-id h2 { font: 800 22px/28px var(--display); letter-spacing: -0.015em; overflow-wrap: anywhere; }
+.ho-id small { display: block; margin-top: 2px; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.ho-sw { display: flex; align-items: center; gap: 10px; flex: none; }
+.ho-sw .pill.on { background: var(--lime); color: var(--ink); }
+.ho-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 0; }
+.ho-facts dt { font-size: 12px; color: var(--muted); }
+.ho-facts dd { margin: 2px 0 0; font-weight: 600; }
+.ho-gaps { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; border-radius: 16px; background: var(--warning-soft); color: #5a3700; font-size: 13px; line-height: 19px; }
+.ho-gaps b { color: var(--warning); }
+.ho-ready { padding: 12px 16px; border-radius: 16px; background: var(--positive-soft); color: var(--positive); font-size: 13px; font-weight: 600; }
+.ho-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding-top: 12px; border-top: 1px solid var(--rule); }
+.ho-foot small { color: var(--muted); font-size: 12px; }
+@media (max-width: 820px) { .ho-card { padding: 18px 16px 14px; } .ho-facts { grid-template-columns: minmax(0, 1fr); } }
+.ho-foot { margin-top: auto; }
+
+/* ---------- pinned bars (Enquiries, Ratings, Bookings, Facts, Calendar): they stay under the top bar while the page scrolls under them ---------- */
+.pin { position: sticky; top: var(--topbar); z-index: 15; margin-left: -32px; margin-right: -32px; padding: 10px 32px; background: var(--sheet); transition: box-shadow 150ms ease; }
+.pin.stuck, .pin-target.stuck { box-shadow: 0 1px 0 var(--edge); }
+.pin-title { margin-top: -12px; margin-bottom: 8px; padding-top: 12px; padding-bottom: 12px; }
+.pin-inset { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }    /* Bookings: inside its own column, beside the stay panel */
+.pin-inset .toolbar { margin-bottom: 0; }
+.calbar.pin { margin-bottom: 10px; }
+@media (max-width: 820px) {
+  .pin { margin-left: -16px; margin-right: -16px; padding: 8px 16px; }
+  .pin-inset { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
+  /* a phone pins only the buttons (period, month), not the whole title or the date fields */
+  .title-row.pin, .calbar.pin { display: contents; }
+  .title-row.pin > .pin-target, .calbar.pin > .pin-target { position: sticky; top: var(--topbar); z-index: 15; width: auto; margin: 10px -16px; padding: 8px 16px; background: var(--sheet); transition: box-shadow 150ms ease; }
+}
+@media (max-width: 820px) {
+  /* Bookings and Facts on a phone: only the view tabs stay pinned (tabs, search and sort together would take a third of the screen) */
+  .pin:has(> .pin-target) { display: contents; }
+  .pin > .tabs.pin-target { position: sticky; top: calc(var(--topbar) + 8px); z-index: 15; }
+  .pin > .tabs.pin-target, .pin > .tabs.pin-target.stuck { box-shadow: 0 0 0 10px var(--sheet); }   /* keeps its grey track; a white margin hides what scrolls under */
 }

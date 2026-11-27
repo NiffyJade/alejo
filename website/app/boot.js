@@ -33,7 +33,7 @@
     var n = document.getElementById('demoNote');
     if (!n) return;
     n.classList.add('boot-note');
-    n.innerHTML = '<svg class="boot-bell" viewBox="0 0 24 24" aria-hidden="true"><g class="dome"><path d="M3 17a9 9 0 0 1 18 0z" fill="currentColor"/><circle class="dot" cx="12" cy="6.2" r="2" fill="#1a4be0"/></g><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="currentColor"/></svg><span class="boot-note-t">Loading your hotel</span>';
+    n.innerHTML = '<svg class="boot-bell" viewBox="0 0 24 24" aria-hidden="true"><g class="dome"><path d="M3 17a9 9 0 0 1 18 0z" fill="currentColor"/><circle class="dot" cx="12" cy="6.2" r="2" fill="#16a34a"/></g><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="currentColor"/></svg><span class="boot-note-t">Loading your hotel</span>';
   };
 
   // The sample hotel's words are taken out of the page, not just hidden, so a screen reader never reads them either. Each keeps its

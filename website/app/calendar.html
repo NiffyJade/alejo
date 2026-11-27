@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Calendar · Alejo staff dashboard</title>
 <meta name="robots" content="noindex">
@@ -17,7 +20,7 @@
 <a class="skip" href="#main">Skip to content</a>
 <div class="app">
 <aside class="side" id="side" aria-label="Dashboard">
-  <a class="brand" href="/app/index.html" aria-label="Alejo, today"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0z" fill="#111"/><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="#111"/><circle cx="12" cy="6.2" r="2" fill="#1a4be0"/></svg><span class="brand-t"><b translate="no">Alejo</b></span></a>
+  <a class="brand" href="/app/index.html" aria-label="Alejo, today"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0z" fill="#111"/><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="#111"/><circle cx="12" cy="6.2" r="2" fill="#16a34a"/></svg><span class="brand-t"><b translate="no">Alejo</b></span></a>
   <div class="scope"><b>BrightSide Hotel</b><span>Lagos, Nigeria</span></div>
   <nav class="nav" aria-label="Pages"><a href="/app/index.html">Today</a><a href="/app/inbox.html">Inbox <i class="cnt" id="needCount" role="img" aria-label="guests need you">3</i></a><a href="/app/enquiries.html">Enquiries</a><a href="/app/ratings.html">Ratings</a><a href="/app/bookings.html">Bookings</a><a href="/app/calendar.html" aria-current="page">Calendar</a><p class="nav-h">Your hotel</p><a href="/app/earnings.html">Earnings</a><a href="/app/knowledge.html">Facts</a><a href="/app/settings.html">Settings</a><a href="/app/team.html">Team</a></nav>
   <div class="side-foot">
@@ -38,8 +41,8 @@
     <div><h1>Calendar</h1><p class="sub">Pick any date to see how many rooms are free, and who is staying, arriving or leaving.</p></div>
   </div>
 
-  <div class="calbar">
-    <div class="calnav">
+  <div class="calbar pin">
+    <div class="calnav pin-target">
       <button class="btn line small" type="button" id="cprev" aria-label="Previous month">&lsaquo;</button>
       <h2 class="calmonth" id="cmonth" aria-live="polite"></h2>
       <button class="btn line small" type="button" id="cnext" aria-label="Next month">&rsaquo;</button>
