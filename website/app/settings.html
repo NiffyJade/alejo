@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app/app.css">
+<script src="/app/boot.js"></script>
 </head>
 <body data-page="settings">
 <a class="skip" href="#main">Skip to content</a>
@@ -40,7 +41,7 @@
         <div class="two f f-gap"><div class="f"><label for="ci">Check-in from</label><input id="ci" name="check_in" autocomplete="off" value="2:00 PM"></div><div class="f"><label for="co">Checkout by</label><input id="co" name="checkout" autocomplete="off" value="12:00 noon"></div></div>
         <p class="p-gap"><button class="btn small" type="button" data-save>Save</button></p></div></section>
     <section class="sset" id="svcSettings" aria-labelledby="s7" hidden><div><h2 id="s7">Services you sell</h2><p class="d">The event hall, gym, pool and anything else guests can book besides a room. Each appears in New booking with the price you set here.</p></div>
-      <div class="panel"><div id="svcList"></div><p class="p-gap"><button class="btn small" type="button" id="svcAdd">Add a service</button></p><p class="sr" id="svcstatus" role="status" aria-live="polite"></p></div></section>
+      <div class="panel"><div id="svcList" data-skel="rows:3"></div><p class="p-gap"><button class="btn small" type="button" id="svcAdd">Add a service</button></p><p class="sr" id="svcstatus" role="status" aria-live="polite"></p></div></section>
     <section class="sset" aria-labelledby="s2"><div><h2 id="s2">Channels</h2><p class="d">Where guests reach you. Replies from staff go back through the same channel.</p></div>
       <div class="panel">
         <div class="srow"><div><div class="t">Phone <span class="pill pos">Connected</span></div><p class="d">+234 800 000 0000 (sample). Answers calls and takes bookings.</p></div><button class="tog" type="button" role="switch" aria-checked="true" aria-label="Phone on"></button></div>

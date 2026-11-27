@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app/app.css">
+<script src="/app/boot.js"></script>
 </head>
 <body data-page="enquiries">
 <a class="skip" href="#main">Skip to content</a>
@@ -39,17 +40,17 @@
   </div>
   <p class="foot-note" id="eqnote" role="status"></p>
   <p class="merr" id="eqerr" role="alert"></p>
-  <div class="sum" id="eqkpis" aria-label="Summary"></div>
+  <div class="sum" id="eqkpis" data-skel="tiles:6" aria-label="Summary"></div>
   <section class="eqsec" aria-labelledby="h-funnel">
     <h2 id="h-funnel">From first message to booking</h2>
-    <div class="funnel" id="eqfunnel"></div>
+    <div class="funnel" id="eqfunnel" data-skel="bars:4"></div>
   </section>
   <section class="eqsec" aria-labelledby="h-open">
     <h2 id="h-open">Still thinking</h2>
     <p class="hint">Asked about rooms, did not book, last message within 3 days.</p>
     <div class="tbl" role="table" aria-label="Unfinished enquiries">
       <div class="th cols-q" role="row"><div>Guest</div><div>Looking at</div><div>Last message</div><div>Follow-up</div></div>
-      <div id="eqopen"></div>
+      <div id="eqopen" data-skel="rows:3"></div>
     </div>
     <p class="foot-note" id="eqlost"></p>
   </section>

@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app/app.css">
+<script src="/app/boot.js"></script>
 </head>
 <body data-page="earnings">
 <a class="skip" href="#main">Skip to content</a>
@@ -62,7 +63,7 @@
         <dl class="er-split" id="erSplit"></dl>
         <p class="er-find" id="erFind"></p>
       </div>
-      <div class="er-kpis" id="erKpis" aria-label="How the rooms did"></div>
+      <div class="er-kpis" id="erKpis" data-skel="tiles:4" aria-label="How the rooms did"></div>
     </section>
 
     <section class="er-main">
@@ -79,25 +80,25 @@
           </div>
         </div>
         <p class="er-hint" id="erChartHint"></p>
-        <div class="er-chart" id="erChart"></div>
+        <div class="er-chart" id="erChart" data-skel="chart:22"></div>
         <div class="er-legend" id="erLegend"></div>
         <div class="er-table" id="erTable" hidden></div>
       </div>
       <div class="er-card" aria-labelledby="h-pay">
         <div class="blk-h"><h2 id="h-pay">How it was paid</h2></div>
         <p class="er-hint">Money received, by payment method.</p>
-        <div id="erMethods"></div>
+        <div id="erMethods" data-skel="bars:3"></div>
       </div>
     </section>
 
     <section class="er-three">
-      <div class="er-card" aria-labelledby="h-src"><div class="blk-h"><h2 id="h-src">Where bookings came from</h2></div><p class="er-hint">Room sales, by how the guest booked.</p><div id="erSources"></div></div>
-      <div class="er-card" aria-labelledby="h-type"><div class="blk-h"><h2 id="h-type">Room types</h2></div><p class="er-hint">Room sales and nights sold.</p><div id="erTypes"></div></div>
-      <div class="er-card" aria-labelledby="h-svc"><div class="blk-h"><h2 id="h-svc">Services</h2><span id="erSvcTotal"></span></div><p class="er-hint">Hall, pool, gym and more, on the day they start.</p><div id="erServices"></div></div>
+      <div class="er-card" aria-labelledby="h-src"><div class="blk-h"><h2 id="h-src">Where bookings came from</h2></div><p class="er-hint">Room sales, by how the guest booked.</p><div id="erSources" data-skel="bars:4"></div></div>
+      <div class="er-card" aria-labelledby="h-type"><div class="blk-h"><h2 id="h-type">Room types</h2></div><p class="er-hint">Room sales and nights sold.</p><div id="erTypes" data-skel="bars:3"></div></div>
+      <div class="er-card" aria-labelledby="h-svc"><div class="blk-h"><h2 id="h-svc">Services</h2><span id="erSvcTotal"></span></div><p class="er-hint">Hall, pool, gym and more, on the day they start.</p><div id="erServices" data-skel="bars:3"></div></div>
     </section>
 
     <section class="er-bottom">
-      <div class="er-card" id="erOwed" aria-labelledby="h-owed"><div class="blk-h"><h2 id="h-owed">Still owed</h2><a href="/app/bookings.html">Open bookings</a></div><p class="er-hint">Stays that have started and services that have happened, not fully paid. As of today.</p><div id="erOwedList"></div></div>
+      <div class="er-card" id="erOwed" aria-labelledby="h-owed"><div class="blk-h"><h2 id="h-owed">Still owed</h2><a href="/app/bookings.html">Open bookings</a></div><p class="er-hint">Stays that have started and services that have happened, not fully paid. As of today.</p><div id="erOwedList" data-skel="rows:4"></div></div>
       <div class="er-card er-access" id="erAccess" aria-labelledby="h-acc" hidden>
         <div class="blk-h"><h2 id="h-acc">Who can see Earnings</h2></div>
         <div class="srow"><div><div class="t">Managers can see this page</div>

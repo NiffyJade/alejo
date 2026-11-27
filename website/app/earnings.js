@@ -6,9 +6,10 @@
 (async () => {
   'use strict';
   if (!document.body || document.body.dataset.page !== 'earnings') return;
+  const release = window.AlejoBoot ? window.AlejoBoot.hold() : () => {};   // the outlines stay until the first report is on screen
   if (window.AlejoReady) await window.AlejoReady;
   const A = window.Alejo, FD = window.FD, E = window.EarnCore, LIVE = !!(A && A.live);
-  if (LIVE && A.denied) return;                                       // live.js has already explained that this page is for the owner
+  if (LIVE && A.denied) { release(); return; }                        // live.js has already explained that this page is for the owner
 
   const $ = (s, r = document) => r.querySelector(s);
   const h = (tag, attrs, ...kids) => {
@@ -34,7 +35,8 @@
   try { const p = sessionStorage.getItem('alejo-earn-period'); if (p && E.PRESETS.includes(p)) { preset = p; range = E.presetRange(p, today); } } catch (e) { /* private mode */ }
 
   /* ---------- fetching ---------- */
-  const fetchReport = (from, to) => (LIVE ? A.earnings(from, to) : Promise.resolve(E.sample(from, to)));
+  // the first report waits out network problems (the loading screen stays up); later ones show their error in the page
+  const fetchReport = (from, to) => (!LIVE ? Promise.resolve(E.sample(from, to)) : report ? A.earnings(from, to) : A.keepTrying(() => A.earnings(from, to)));
   const load = async () => {
     const my = ++seq, body = $('#erBody');
     body.setAttribute('aria-busy', 'true'); body.classList.add('loading'); $('#erErr').textContent = '';
@@ -49,7 +51,7 @@
       $('#erErr').textContent = /for the owner|42501/.test(e.message) ? 'Earnings are for the owner. Ask the owner if you need to see them.'
         : /earnings_report|Could not find the function/i.test(e.message) ? 'Earnings are not switched on for this hotel yet.' : e.message;
     } finally {
-      if (my === seq) { body.removeAttribute('aria-busy'); body.classList.remove('loading'); }
+      if (my === seq && (report || $('#erErr').textContent)) { body.removeAttribute('aria-busy'); body.classList.remove('loading'); release(); }
     }
   };
 

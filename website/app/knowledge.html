@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app/app.css">
+<script src="/app/boot.js"></script>
 </head>
 <body data-page="facts">
 <a class="skip" href="#main">Skip to content</a>
@@ -48,7 +49,7 @@
   <section class="missing" id="missing" aria-labelledby="mh">
     <h2 id="mh">Facts to fill in <span id="mcount" class="count-soft"></span></h2>
     <p class="lead">Until a fact is filled in, every answer that needs it is held back and the question goes to your staff.</p>
-    <div class="fgrid" id="mgrid"></div>
+    <div class="fgrid" id="mgrid" data-skel="rows:3"></div>
   </section>
   <div class="tabs" role="tablist" id="ktabs" aria-label="Views"></div>
   <div class="toolbar">
@@ -57,12 +58,12 @@
   </div>
   <div class="tbl" role="table" aria-label="Answers">
     <div class="th cols-k" role="row"><div>Question</div><div>Topic</div><div>Source</div><div>Status</div><div></div></div>
-    <div id="kbody"></div>
+    <div id="kbody" data-skel="rows:6"></div>
   </div>
   <section class="details-sec" id="hdetails" aria-labelledby="hd">
     <h2 id="hd">Hotel details <span id="hdcount" class="count-soft"></span></h2>
     <p class="lead">The values guests are told, like the Wi-Fi password or your address. Change one and every answer that uses it changes. Clear one and those answers are held back until you fill it in again.</p>
-    <div class="dlist" id="dlist" role="table" aria-label="Hotel details"></div>
+    <div class="dlist" id="dlist" data-skel="rows:4" role="table" aria-label="Hotel details"></div>
   </section>
 </main>
 </div>

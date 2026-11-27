@@ -4,6 +4,7 @@
 (async () => {
   'use strict';
   if (!document.body || document.body.dataset.page !== 'team') return;
+  const releaseBoot = window.AlejoBoot ? window.AlejoBoot.hold() : () => {};   // the outlines stay until the report is drawn (boot.js)
   if (window.AlejoReady) await window.AlejoReady;
   const A = window.Alejo, LIVE = !!(A && A.live);
 
@@ -38,10 +39,10 @@
   const fail = (e) => { $('#terr').textContent = e && e.message ? e.message : String(e); };
   const clearFail = () => { $('#terr').textContent = ''; };
 
-  let team = [], you = '';
+  let team = [], you = '', shown = false;
   const load = async () => {
     clearFail();
-    try { const r = await A.team('list'); team = r.team || []; you = r.you || ''; render(); }
+    try { const r = await (shown ? A.team('list') : A.keepTrying(() => A.team('list'))); shown = true; team = r.team || []; you = r.you || ''; render(); }   // the first load waits out network problems
     catch (e) { fail(e); }
   };
 
@@ -107,5 +108,5 @@
     });
   });
 
-  load();
+  load().finally(releaseBoot);
 })();

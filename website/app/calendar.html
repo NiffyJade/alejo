@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app/app.css">
+<script src="/app/boot.js"></script>
 </head>
 <body data-page="calendar">
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +54,7 @@
   <ul class="callegend" aria-label="Colours">
     <li><i class="sw open"></i>Rooms free</li><li><i class="sw few"></i>Few left</li><li><i class="sw full"></i>Full</li><li><i class="sw closed"></i>Closed (blocked)</li><li><i class="sw past"></i>Past</li>
   </ul>
-  <div class="calgrid" id="cgrid" role="group" aria-label="Month"></div>
+  <div class="calgrid" id="cgrid" data-skel="cal" role="group" aria-label="Month"></div>
   <p class="sr" id="cstatus" role="status" aria-live="polite"></p>
 
   <section class="calday" id="cday" aria-live="polite" tabindex="-1"></section>

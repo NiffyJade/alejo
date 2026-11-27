@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app/app.css">
+<script src="/app/boot.js"></script>
 </head>
 <body data-page="team">
 <a class="skip" href="#main">Skip to content</a>
@@ -42,7 +43,7 @@
     <h2 id="h-people">People</h2>
     <div class="tbl" role="table" aria-label="Team">
       <div class="th team-cols" role="row"><div>Person</div><div>Role</div><div></div></div>
-      <div id="tlist"></div>
+      <div id="tlist" data-skel="rows:4"></div>
     </div>
   </section>
   <section class="eqsec" aria-labelledby="h-add">

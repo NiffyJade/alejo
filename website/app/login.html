@@ -32,7 +32,9 @@
 <script>
 (() => {
   const err = document.getElementById('loginErr');
-  if (new URLSearchParams(location.search).get('expired')) err.textContent = 'Your session ended. Please sign in again.';
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('expired')) err.textContent = 'Your session ended. Please sign in again.';
+  else if (qs.get('why')) err.textContent = qs.get('why').slice(0, 160);
   if (window.Alejo && window.Alejo.signedIn()) location.replace('/app/index.html');
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();

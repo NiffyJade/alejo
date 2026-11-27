@@ -5,6 +5,7 @@
 (async () => {
   'use strict';
   if (!document.body || document.body.dataset.page !== 'enquiries') return;
+  const releaseBoot = window.AlejoBoot ? window.AlejoBoot.hold() : () => {};   // the outlines stay until the report is drawn (boot.js)
   if (window.AlejoReady) await window.AlejoReady;
   const A = window.Alejo, FD = window.FD, LIVE = !!(A && A.live);
 
@@ -91,7 +92,7 @@
   const load = async () => {
     const mine = ++loading;
     try {
-      const r = LIVE ? await A.report(days) : SAMPLE(days);
+      const r = LIVE ? await (lastReport ? A.report(days) : A.keepTrying(() => A.report(days))) : SAMPLE(days);   // the first load waits out network problems
       if (mine !== loading) return;
       lastReport = r; render(r); $('#eqerr').textContent = '';
     } catch (e) { if (mine === loading) $('#eqerr').textContent = 'Could not load the figures: ' + (e.message || 'try again.'); }
@@ -103,7 +104,7 @@
   }));
 
   paintToggle();
-  await load();
+  await load().finally(releaseBoot);
   let last = Date.now();
   window.addEventListener('alejo:data', () => { if (Date.now() - last > 30000) { last = Date.now(); load(); paintToggle(); } });   // not on every message: the report is a heavier query
 })();

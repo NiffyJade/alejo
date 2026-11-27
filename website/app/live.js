@@ -5,6 +5,7 @@
    the data is in, and app.js waits for it. */
 (function () {
   'use strict';
+  if (window.AlejoBoot) window.AlejoBoot.fill();                      // signed in: grey outlines instead of the sample hotel while the rows load (boot.js)
   const SB = 'https://uavlejanscnsvjdxfslh.supabase.co';
   const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVhdmxlamFuc2Nuc3ZqZHhmc2xoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwMDcyODUsImV4cCI6MjEwODU4MzI4NX0.wDbPMD4BHF9ZpkgTwyAub-pyYQgsY93FSdQaUNlrJRA';                                  // public by design
   const KEY = 'alejo_auth';
@@ -19,24 +20,38 @@
     set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } },
     clear() { try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ } },
   };
+  // Could trying again help? No network, a dropped connection, or the server having a bad moment: yes. A refusal (wrong password,
+  // not on the staff list, no permission): no.
+  const retryable = (e) => !!e && (e.name === 'TypeError' || e.name === 'AbortError' || e.status >= 500 || e.status === 408 || e.status === 429
+    || /failed to fetch|networkerror|load failed|network request failed/i.test(String(e.message)));
+  const httpError = (msg, status) => { const e = new Error(msg); e.status = status; return e; };
+  // wait before trying again: 2 s, 4 s, 8 s ... at most 30 s, or at once when the connection comes back; the loading screen says which
+  const pause = (ms) => {
+    if (window.AlejoBoot) window.AlejoBoot.waiting(navigator.onLine === false ? 'No internet. Waiting to reconnect' : 'Still connecting. Trying again');
+    return new Promise((res) => { const t = setTimeout(res, ms); window.addEventListener('online', () => { clearTimeout(t); res(); }, { once: true }); })
+      .then(() => { if (window.AlejoBoot) window.AlejoBoot.waiting('Loading your hotel'); });
+  };
+  // a page's first load: keep trying through network problems (the loading screen stays up), give up only on a real refusal
+  const keepTrying = async (fn) => { for (let ms = 2000; ; ms = Math.min(ms * 2, 30000)) { try { return await fn(); } catch (e) { if (!retryable(e)) throw e; await pause(ms); } } };
   const authCall = async (grant, body) => {
     const r = await fetch(SB + '/auth/v1/token?grant_type=' + grant, { method: 'POST', headers: { apikey: ANON, 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error_description || j.msg || 'Sign-in failed.');
+    if (!r.ok) throw httpError(j.error_description || j.msg || 'Sign-in failed.', r.status);
     return { access: j.access_token, refresh: j.refresh_token, exp: Date.now() + (j.expires_in || 3600) * 1000 };
   };
   const token = async () => {
     let a = store.get();
     if (!a) throw new Error('signed-out');
     if (a.exp - Date.now() < 60000) {
-      try { a = await authCall('refresh_token', { refresh_token: a.refresh }); store.set(a); } catch (e) { store.clear(); throw new Error('signed-out'); }
+      try { a = await authCall('refresh_token', { refresh_token: a.refresh }); store.set(a); }
+      catch (e) { if (retryable(e)) throw e; store.clear(); throw new Error('signed-out'); }   // offline: keep the sign-in and try again later
     }
     return a.access;
   };
   const rest = async (path, opts) => {
     const t = await token();
     const r = await fetch(SB + '/rest/v1/' + path, Object.assign({}, opts, { headers: Object.assign({ apikey: ANON, authorization: 'Bearer ' + t, 'content-type': 'application/json' }, (opts || {}).headers) }));
-    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.message || 'Request failed (' + r.status + ').'); }
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw httpError(j.message || 'Request failed (' + r.status + ').', r.status); }
     return r.status === 204 ? null : r.json().catch(() => null);
   };
 
@@ -318,7 +333,7 @@
     earnings: (from, to) => rest('rpc/earnings_report', { method: 'POST', body: JSON.stringify({ p_hotel: HOTEL.id, p_from: from, p_to: to }) }),   // owner only (sql/029): the database refuses anyone else
     earningsForManagers: async () => { const r = await rest('hotels?select=earnings_for_managers&id=eq.' + HOTEL.id).catch(() => null); return !!(r && r[0] && r[0].earnings_for_managers); },
     setEarningsForManagers: (on) => rest('rpc/owner_set_earnings_access', { method: 'POST', body: JSON.stringify({ p_hotel: HOTEL.id, p_on: !!on }) }),
-    hotel: () => HOTEL, hotels: () => HOTELS,
+    hotel: () => HOTEL, hotels: () => HOTELS, retryable, keepTrying,
     async ask(question) {                                           // the staff copilot: answers from the hotel's live records (edge function staff-copilot)
       const t = await token();
       const r = await fetch(SB + '/functions/v1/staff-copilot', { method: 'POST', headers: { apikey: ANON, authorization: 'Bearer ' + t, 'content-type': 'application/json' }, body: JSON.stringify({ question, hotel_id: HOTEL.id }) });
@@ -449,6 +464,8 @@
     if (document.body && document.body.dataset.page === 'login') return false;
     const dressWhenReady = () => (document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', dress) : dress());
     if (!Alejo.signedIn()) { dressWhenReady(); return false; }
+    let wait = 2000;
+    for (;;) {
     try {
       if (((await claims()).user_metadata || {}).must_change_password === true) await passwordDialog(true);     // nothing loads until they choose their own password
       await chooseHotel();
@@ -464,10 +481,12 @@
       return true;
     } catch (e) {
       if (e.message === 'signed-out') { location.replace('/app/login.html?expired=1'); return new Promise(() => {}); }
-      window.AlejoError = e.message;
-      store.clear();
-      dressWhenReady();
-      return false;
+      if (retryable(e)) { await pause(wait); wait = Math.min(wait * 2, 30000); continue; }   // no network or a server hiccup: keep loading and try again
+      store.clear();                                                // refused (for example, not on this hotel's staff list): say why on the sign-in page, never show the sample hotel
+      location.replace('/app/login.html?why=' + encodeURIComponent(String(e.message || 'This account could not open the dashboard.').slice(0, 160)));
+      return new Promise(() => {});
+    }
     }
   })();
+  window.AlejoReady.finally(() => { if (window.AlejoBoot) window.AlejoBoot.ready(); });   // registered before any page awaits it, so the pages have drawn by the time boot.js lifts the outlines
 })();

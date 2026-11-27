@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app/app.css">
+<script src="/app/boot.js"></script>
 </head>
 <body data-page="ratings">
 <a class="skip" href="#main">Skip to content</a>
@@ -39,21 +40,21 @@
   </div>
   <p class="foot-note" id="rtnote" role="status"></p>
   <p class="merr" id="rterr" role="alert"></p>
-  <div class="sum" id="rtkpis" aria-label="Summary"></div>
+  <div class="sum" id="rtkpis" data-skel="tiles:4" aria-label="Summary"></div>
   <section class="eqsec" aria-labelledby="h-dist">
     <h2 id="h-dist">How the scores are spread</h2>
-    <div class="funnel" id="rtdist"></div>
+    <div class="funnel" id="rtdist" data-skel="bars:5"></div>
   </section>
   <section class="eqsec" id="rtroomsec" aria-labelledby="h-rooms" hidden>
     <h2 id="h-rooms">By room type</h2>
-    <div id="rtrooms"></div>
+    <div id="rtrooms" data-skel="rows:3"></div>
   </section>
   <section class="eqsec" aria-labelledby="h-low">
     <h2 id="h-low">Needs attention</h2>
     <p class="hint">Scores of 3 or lower. Each one opened a complaint in the Inbox and alerted the staff group.</p>
     <div class="tbl" role="table" aria-label="Low scores">
       <div class="th cols-r" role="row"><div>Guest</div><div>Score</div><div>Rated</div><div>Status</div></div>
-      <div id="rtlow"></div>
+      <div id="rtlow" data-skel="rows:3"></div>
     </div>
   </section>
   <p class="foot-note">Guests on Telegram are asked about 30 minutes after they check out, with five buttons from 1 to 5; they can tap again to change their score for 14 days. The public review link goes to every guest, not only to those who score highly. Guests who booked by phone and never joined Telegram are not asked. Every Monday from 09:00 the staff group gets last week's ratings.</p>

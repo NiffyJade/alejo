@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app/app.css">
+<script src="/app/boot.js"></script>
 </head>
 <body data-page="bookings">
 <a class="skip" href="#main">Skip to content</a>
@@ -42,17 +43,17 @@
     <form class="vform" id="vform" autocomplete="off"><label class="sr" for="vcode">6-digit stay code</label><input class="field" id="vcode" inputmode="numeric" maxlength="9" placeholder="6-digit stay code" spellcheck="false" autocomplete="off"><button class="btn" type="submit">Verify</button></form>
     <div class="vres" id="vresult" role="status" aria-live="polite"></div>
   </section>
-  <div class="sum tiles" id="bsum" role="group" aria-label="Today, choose one to filter the list"></div>
+  <div class="sum tiles" id="bsum" data-skel="tiles:4" role="group" aria-label="Today, choose one to filter the list"></div>
   <div class="bk-layout">
     <section class="bk-list" aria-label="Stays">
-      <div class="tabs" role="tablist" id="btabs" aria-label="Views"></div>
+      <div class="tabs" role="tablist" id="btabs" data-skel="pills:4" aria-label="Views"></div>
       <div class="toolbar">
         <label class="sr" for="bq">Search stays</label><input class="field" id="bq" type="search" placeholder="Guest, room or reference" autocomplete="off" spellcheck="false">
         <div class="meta"><span id="bmeta"></span><label class="sr" for="bsort">Sort by</label><select id="bsort" name="sort"><option value="prio">Sort: today first</option><option value="in">Sort: check-in</option><option value="name">Sort: name</option><option value="total">Sort: total</option></select></div>
       </div>
       <div class="tbl" aria-label="Stays">
         <div class="th cols-b" aria-hidden="true"><div>Guest</div><div>Room</div><div>Dates</div><div>Status</div><div class="num">Total</div></div>
-        <div id="bbody"></div>
+        <div id="bbody" data-skel="rows:7"></div>
       </div>
     </section>
     <aside class="bk-detail" id="bdetail" aria-label="Selected stay" tabindex="-1"></aside>
@@ -62,7 +63,7 @@
       <label class="sr" for="svcFilter">Show</label><select class="minput svc-filter" id="svcFilter"><option value="up">Upcoming</option><option value="past">Past</option><option value="all">All</option></select></div>
     <div class="tbl" aria-label="Other bookings">
       <div class="th cols-s" aria-hidden="true"><div>Customer</div><div>Service</div><div>When</div><div class="num">Amount</div></div>
-      <div id="svcBody"></div>
+      <div id="svcBody" data-skel="rows:2"></div>
     </div>
   </section>
   <section class="blocks" id="blocksSec" aria-labelledby="h-blocks" hidden>

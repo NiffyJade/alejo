@@ -5,6 +5,7 @@
 (async () => {
   'use strict';
   if (!document.body || document.body.dataset.page !== 'ratings') return;
+  const releaseBoot = window.AlejoBoot ? window.AlejoBoot.hold() : () => {};   // the outlines stay until the report is drawn (boot.js)
   if (window.AlejoReady) await window.AlejoReady;
   const A = window.Alejo, FD = window.FD, LIVE = !!(A && A.live);
 
@@ -37,7 +38,7 @@
         { name: 'Emeka N.', room_type: 'Deluxe', room_number: '211', check_in: '2026-10-24', check_out: '2026-10-26', rating: 3, rated_at: hours(70), item_open: false }] };
   };
 
-  let days = 7, loading = 0;
+  let days = 7, loading = 0, shown = false;
   const kpi = (label, value, note) => h('div', {}, h('b', { text: String(value) }), h('span', { text: label }), h('small', { text: note }));
 
   const render = (r) => {
@@ -83,9 +84,9 @@
   const load = async () => {
     const mine = ++loading;
     try {
-      const r = LIVE ? await A.ratings(days) : SAMPLE(days);
+      const r = LIVE ? await (shown ? A.ratings(days) : A.keepTrying(() => A.ratings(days))) : SAMPLE(days);   // the first load waits out network problems
       if (mine !== loading) return;
-      render(r); $('#rterr').textContent = '';
+      shown = true; render(r); $('#rterr').textContent = '';
     } catch (e) { if (mine === loading) $('#rterr').textContent = 'Could not load the figures: ' + (e.message || 'try again.'); }
   };
   document.querySelectorAll('[data-days]').forEach((b) => b.addEventListener('click', () => {
@@ -93,7 +94,7 @@
     document.querySelectorAll('[data-days]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     load();
   }));
-  await load();
+  await load().finally(releaseBoot);
   let last = Date.now();
   window.addEventListener('alejo:data', () => { if (Date.now() - last > 30000) { last = Date.now(); load(); } });
 })();
