@@ -188,7 +188,9 @@
       const isFocus = !!focus && b.from === focus;
       // labels on one even step; the marked day is always labelled, and a step label too close to it gives way
       if (isFocus || (i % step === 0 && !(focusAt >= 0 && Math.abs(focusAt - i) < step))) {
-        const tx = s('text', { x: cx, y: H - 8, 'text-anchor': 'middle', class: 'tick' + (isFocus ? ' now' : '') });
+        // the first and last labels are pulled inside the plot, so a label never runs off a narrow phone
+        const tx = s('text', { x: i === n - 1 && n > 1 ? Math.min(cx + bw / 2, W - R) : i === 0 && n > 1 ? Math.max(cx - bw / 2, L) : cx, y: H - 8,
+          'text-anchor': i === n - 1 && n > 1 ? 'end' : i === 0 && n > 1 ? 'start' : 'middle', class: 'tick' + (isFocus ? ' now' : '') });
         tx.textContent = isFocus && focus === today ? 'Today' : b.label; svg.append(tx);
       }
       const hit = s('rect', { x: L + band * i, y: T, width: band, height: ph + B, fill: 'transparent' });
