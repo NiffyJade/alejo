@@ -105,7 +105,7 @@
       const pays = paidBy[b.id] || [];
       return { id: b.id, ref: b.id.slice(0, 8).toUpperCase(), code: String(b.stay_code || ''), guest: g.name, guestId: g.id, room: b.room_number || 'not assigned', type: b.room_type || 'Room', in: b.check_in, out: b.check_out,
         created: b.created_at, phone: g.phone || '', src: SRC[b.source] || (g.telegram_chat_id ? 'Telegram' : 'Phone'), source: b.source || '', status: b.status, rating: b.rating || null, roomNo: b.room_number || '',
-        payments: pays, paid: pays.reduce((s, p) => s + p.amount, 0), stage, note: when[0] + ' ' + stamp(when[1]), linked: !!g.telegram_chat_id, hue: hue(g.name), nights, total: nights * (RATES[b.room_type] || 0) };
+        payments: pays, paid: pays.reduce((s, p) => s + p.amount, 0), stage, note: when[0] + ' ' + stamp(when[1]), linked: !!g.telegram_chat_id, hue: hue(g.name), nights, total: nights * (b.nightly_rate != null ? Number(b.nightly_rate) : (RATES[b.room_type] || 0)) };   // the price it was booked at (sql/029); older rows fall back to today's rate
     });
     const byGuest = {};
     bookings.forEach((b) => { if (!byGuest[b.guest] || b.in > byGuest[b.guest].in) byGuest[b.guest] = b; });
@@ -266,7 +266,9 @@
 
   /* ---------- the public object app.js uses ---------- */
   const RANK = { staff: 1, manager: 2, owner: 3, admin: 4 };
-  const NEEDS = { enquiries: 'manager', ratings: 'manager', facts: 'manager', settings: 'manager', team: 'owner' };   // each restricted page and the lowest role that may open it
+  const NEEDS = { enquiries: 'manager', ratings: 'manager', facts: 'manager', settings: 'manager', team: 'owner', earnings: 'owner' };   // each restricted page and the lowest role that may open it
+  // Earnings: the owner, or a manager once the owner has switched it on for managers (the database checks the same rule: can_see_earnings)
+  const seesEarnings = async () => Alejo.can('owner') || (Alejo.can('manager') && (await rest('rpc/can_see_earnings', { method: 'POST', body: JSON.stringify({ p_hotel: HOTEL.id }) }).catch(() => false)) === true);
   const Alejo = {
     live: false, me: null, denied: false,
     can: (min) => !!Alejo.me && (RANK[Alejo.me.role] || 0) >= (RANK[min] || 99),
@@ -313,6 +315,9 @@
     changePassword: () => passwordDialog(false),
     ratings: (days) => rest('rpc/ratings_report', { method: 'POST', body: JSON.stringify({ p_hotel: HOTEL.id, p_days: days }) }),
     report: (days) => rest('rpc/enquiry_report', { method: 'POST', body: JSON.stringify({ p_hotel: HOTEL.id, p_days: days }) }),
+    earnings: (from, to) => rest('rpc/earnings_report', { method: 'POST', body: JSON.stringify({ p_hotel: HOTEL.id, p_from: from, p_to: to }) }),   // owner only (sql/029): the database refuses anyone else
+    earningsForManagers: async () => { const r = await rest('hotels?select=earnings_for_managers&id=eq.' + HOTEL.id).catch(() => null); return !!(r && r[0] && r[0].earnings_for_managers); },
+    setEarningsForManagers: (on) => rest('rpc/owner_set_earnings_access', { method: 'POST', body: JSON.stringify({ p_hotel: HOTEL.id, p_on: !!on }) }),
     hotel: () => HOTEL, hotels: () => HOTELS,
     async ask(question) {                                           // the staff copilot: answers from the hotel's live records (edge function staff-copilot)
       const t = await token();
@@ -403,8 +408,8 @@
         if (role) role.textContent = Alejo.me.role === 'admin' ? 'Alejo admin' : Alejo.me.role.charAt(0).toUpperCase() + Alejo.me.role.slice(1);
       }
       document.querySelectorAll('.nav a').forEach((a) => {          // links to pages this role cannot open leave the menu
-        const m = (a.getAttribute('href') || '').match(/\/(enquiries|ratings|knowledge|settings|team)\.html/);
-        if (m && !Alejo.can(m[1] === 'team' ? 'owner' : 'manager')) a.remove();
+        const m = (a.getAttribute('href') || '').match(/\/(enquiries|ratings|knowledge|settings|team|earnings)\.html/);
+        if (m && (m[1] === 'earnings' ? !Alejo.seeEarnings : !Alejo.can(m[1] === 'team' ? 'owner' : 'manager'))) a.remove();
       });
       if (!Alejo.can('manager')) { const hd = document.querySelector('.nav .nav-h'); if (hd) hd.remove(); }
       if (Alejo.denied) {                                           // landing on one anyway explains why, instead of an empty or failing page
@@ -449,8 +454,9 @@
       await chooseHotel();
       const [rows, me] = await Promise.all([fetchRows(), loadMe()]);
       Alejo.me = me;
-      const pageNeed = NEEDS[document.body && document.body.dataset.page];
-      Alejo.denied = !!pageNeed && !Alejo.can(pageNeed); Alejo.deniedFor = pageNeed;
+      Alejo.seeEarnings = await seesEarnings();
+      const page = document.body && document.body.dataset.page, pageNeed = NEEDS[page];
+      Alejo.denied = page === 'earnings' ? !Alejo.seeEarnings : !!pageNeed && !Alejo.can(pageNeed); Alejo.deniedFor = pageNeed;
       build(rows);
       Alejo.live = true; lastUpdate = new Date();
       dressWhenReady();

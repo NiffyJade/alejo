@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Earnings · Alejo staff dashboard</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f3f5fa">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://api.fontshare.com">
+<link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body data-page="earnings">
+<a class="skip" href="#main">Skip to content</a>
+<div class="app">
+<aside class="side" id="side" aria-label="Dashboard">
+  <a class="brand" href="/app/index.html" aria-label="Alejo, today"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0z" fill="#111"/><rect x="2" y="18.5" width="20" height="2.5" rx="1" fill="#111"/><circle cx="12" cy="6.2" r="2" fill="#1a4be0"/></svg><span class="brand-t"><b translate="no">Alejo</b></span></a>
+  <div class="scope"><b>BrightSide Hotel</b><span>Lagos, Nigeria</span></div>
+  <nav class="nav" aria-label="Pages"><a href="/app/index.html">Today</a><a href="/app/inbox.html">Inbox <i class="cnt" id="needCount" role="img" aria-label="guests need you">3</i></a><a href="/app/enquiries.html">Enquiries</a><a href="/app/ratings.html">Ratings</a><a href="/app/bookings.html">Bookings</a><a href="/app/calendar.html">Calendar</a><p class="nav-h">Your hotel</p><a href="/app/earnings.html" aria-current="page">Earnings</a><a href="/app/knowledge.html">Facts</a><a href="/app/settings.html">Settings</a><a href="/app/team.html">Team</a></nav>
+  <div class="side-foot">
+    <div class="links"><a class="web-link" href="/">Website</a><span id="authSlot"></span></div>
+    <div class="me"><span class="acct" id="acct" title="Kunle Adebayo, owner">KA</span><span><b id="meName">Kunle Adebayo</b><small id="meRole">Owner</small></span></div>
+  </div>
+</aside>
+<div class="scrim" id="scrim"></div>
+<div class="frame-main">
+  <header class="top">
+    <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="side">Menu</button>
+    <span class="top-name" translate="no">Alejo</span>
+    <div class="search"><label class="sr" for="q">Search</label><input id="q" name="q" type="search" placeholder="Search stays…" autocomplete="off" spellcheck="false"><kbd aria-hidden="true">/</kbd></div>
+    <span class="demo-note" id="demoNote">Sample data, Tue 27 Oct, 02:31</span>
+  </header>
+<main class="sheet" id="main">
+  <div class="title-row er-title">
+    <div><h1>Earnings</h1><p class="sub" id="erSub">What BrightSide Hotel took in, and what earned it.</p></div>
+    <div class="er-period">
+      <div class="tabs" role="group" aria-label="Period" id="erTabs">
+        <button class="tab" type="button" data-p="today" aria-pressed="false">Today</button>
+        <button class="tab" type="button" data-p="week" aria-pressed="false">This week</button>
+        <button class="tab" type="button" data-p="month" aria-pressed="true">This month</button>
+        <button class="tab" type="button" data-p="year" aria-pressed="false">This year</button>
+        <button class="tab" type="button" data-p="custom" aria-pressed="false" aria-expanded="false" aria-controls="erCustom">Pick dates</button>
+      </div>
+      <form class="er-custom" id="erCustom" hidden>
+        <label>From <input class="field" type="date" id="erFrom" required></label>
+        <label>To <input class="field" type="date" id="erTo" required></label>
+        <button class="btn small" type="submit">Show</button>
+      </form>
+    </div>
+  </div>
+  <p class="foot-note" id="erNote" role="status"></p>
+  <p class="merr" id="erErr" role="alert"></p>
+
+  <div class="er-body" id="erBody" aria-live="polite">
+    <section class="er-top" aria-label="Summary">
+      <div class="er-hero" aria-labelledby="h-rec">
+        <div class="er-hero-h"><h2 id="h-rec">Money received</h2><span id="erWhen"></span></div>
+        <b class="er-big" id="erRec">–</b>
+        <p class="er-cmp" id="erCmp"></p>
+        <dl class="er-split" id="erSplit"></dl>
+        <p class="er-find" id="erFind"></p>
+      </div>
+      <div class="er-kpis" id="erKpis" aria-label="How the rooms did"></div>
+    </section>
+
+    <section class="er-main">
+      <div class="er-card er-chart-card" aria-labelledby="h-chart">
+        <div class="blk-h">
+          <h2 id="h-chart">Money received, by day</h2>
+          <div class="er-ctl">
+            <div class="tabs small" role="group" aria-label="What to draw" id="erMetric">
+              <button class="tab" type="button" data-m="received" aria-pressed="true">Received</button>
+              <button class="tab" type="button" data-m="rooms" aria-pressed="false">Room sales</button>
+            </div>
+            <button class="btn line small" type="button" id="erTblBtn" aria-expanded="false" aria-controls="erTable">Show table</button>
+            <button class="btn line small" type="button" id="erCsv">Download CSV</button>
+          </div>
+        </div>
+        <p class="er-hint" id="erChartHint"></p>
+        <div class="er-chart" id="erChart"></div>
+        <div class="er-legend" id="erLegend"></div>
+        <div class="er-table" id="erTable" hidden></div>
+      </div>
+      <div class="er-card" aria-labelledby="h-pay">
+        <div class="blk-h"><h2 id="h-pay">How it was paid</h2></div>
+        <p class="er-hint">Money received, by payment method.</p>
+        <div id="erMethods"></div>
+      </div>
+    </section>
+
+    <section class="er-three">
+      <div class="er-card" aria-labelledby="h-src"><div class="blk-h"><h2 id="h-src">Where bookings came from</h2></div><p class="er-hint">Room sales, by how the guest booked.</p><div id="erSources"></div></div>
+      <div class="er-card" aria-labelledby="h-type"><div class="blk-h"><h2 id="h-type">Room types</h2></div><p class="er-hint">Room sales and nights sold.</p><div id="erTypes"></div></div>
+      <div class="er-card" aria-labelledby="h-svc"><div class="blk-h"><h2 id="h-svc">Services</h2><span id="erSvcTotal"></span></div><p class="er-hint">Hall, pool, gym and more, on the day they start.</p><div id="erServices"></div></div>
+    </section>
+
+    <section class="er-bottom">
+      <div class="er-card" id="erOwed" aria-labelledby="h-owed"><div class="blk-h"><h2 id="h-owed">Still owed</h2><a href="/app/bookings.html">Open bookings</a></div><p class="er-hint">Stays that have started and services that have happened, not fully paid. As of today.</p><div id="erOwedList"></div></div>
+      <div class="er-card er-access" id="erAccess" aria-labelledby="h-acc" hidden>
+        <div class="blk-h"><h2 id="h-acc">Who can see Earnings</h2></div>
+        <div class="srow"><div><div class="t">Managers can see this page</div>
+          <p class="d" id="erAccDesc">Off: only you, the owner, see these figures. Front-desk staff never see them.</p></div>
+          <button class="tog" id="erAccTog" type="button" role="switch" aria-checked="false" aria-labelledby="h-acc"></button></div>
+        <p class="sr" id="erAccStatus" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+    <p class="foot-note er-notes">Money received is counted on the day it was recorded, refunds taken off. Room sales spread each stay over its nights at the price it was booked at. Occupancy is nights sold ÷ rooms on sale. Average rate is room sales ÷ nights sold. RevPAR is room sales ÷ rooms on sale, per night.</p>
+  </div>
+</main>
+</div>
+</div>
+
+<script src="/app/data.js"></script>
+<script src="/app/live.js"></script>
+<script src="/app/app.js"></script>
+<script src="/app/earnings-core.js"></script>
+<script src="/app/earnings.js"></script>
+</body>
+</html>
